@@ -67,18 +67,23 @@ export class GeminiAdapter implements ProviderAdapter {
    * - 處理可能不含 usage 的 chunk
    */
   transformStreamChunk(chunk: { event: string; data: unknown }, model: string): StreamChunkResult {
-    const data = chunk.data as string
+    // RouterService already JSON.parse'd the data — it arrives as an object, not a string
+    const data = chunk.data
 
-    // Handle [DONE] signal
-    if (data === '[DONE]') {
+    // Handle [DONE] signal (string comparison for safety)
+    if (data === '[DONE]' || (typeof data === 'string' && data.trim() === '[DONE]')) {
       return { chunk: null, done: true }
     }
 
     let parsed: Record<string, unknown>
-    try {
-      parsed = JSON.parse(data) as Record<string, unknown>
-    } catch {
-      return { chunk: null, done: false }
+    if (typeof data === 'string') {
+      try {
+        parsed = JSON.parse(data) as Record<string, unknown>
+      } catch {
+        return { chunk: null, done: false }
+      }
+    } else {
+      parsed = data as Record<string, unknown>
     }
 
     const rawChoices = (parsed.choices ?? []) as Array<Record<string, unknown>>

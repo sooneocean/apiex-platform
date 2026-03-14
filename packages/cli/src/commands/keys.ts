@@ -15,7 +15,7 @@ interface CreateKeyResponse {
 }
 
 export async function keysListAction(opts: { json?: boolean }): Promise<void> {
-  const res = await apiRequest<{ keys: ApiKey[] }>('GET', '/keys')
+  const res = await apiRequest<{ data: ApiKey[] }>('GET', '/keys')
 
   if (!res.ok) {
     console.error(`Error: ${res.status}`)
@@ -23,7 +23,7 @@ export async function keysListAction(opts: { json?: boolean }): Promise<void> {
     process.exit(1)
   }
 
-  const keys = res.data.keys ?? []
+  const keys = res.data.data ?? []
 
   if (opts.json) {
     console.log(JSON.stringify(keys, null, 2))

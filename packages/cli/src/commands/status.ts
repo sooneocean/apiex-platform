@@ -7,15 +7,16 @@ interface Model {
 }
 
 interface UsageSummary {
-  totalRequests: number
-  totalTokens: number
-  period: string
+  total_requests: number
+  total_tokens: number
+  quota_remaining: number
+  breakdown: Array<{ model_tag: string; tokens: number; requests: number }>
 }
 
 export async function statusAction(opts: { json?: boolean }): Promise<void> {
   const [modelsRes, usageRes] = await Promise.all([
     apiRequest<{ data: Model[] }>('GET', '/v1/models'),
-    apiRequest<UsageSummary>('GET', '/usage/summary'),
+    apiRequest<{ data: UsageSummary }>('GET', '/v1/usage/summary'),
   ])
 
   if (opts.json) {
@@ -39,10 +40,10 @@ export async function statusAction(opts: { json?: boolean }): Promise<void> {
 
   console.log('\n=== Usage ===')
   if (usageRes.ok) {
-    const u = usageRes.data
-    console.log(`  Period: ${u.period}`)
-    console.log(`  Requests: ${u.totalRequests}`)
-    console.log(`  Tokens: ${u.totalTokens}`)
+    const u = usageRes.data.data
+    console.log(`  Requests: ${u.total_requests}`)
+    console.log(`  Tokens: ${u.total_tokens}`)
+    console.log(`  Quota remaining: ${u.quota_remaining === -1 ? 'unlimited' : u.total_tokens}`)
   } else {
     console.log(`  (unavailable — status ${usageRes.status})`)
   }

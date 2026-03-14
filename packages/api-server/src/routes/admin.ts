@@ -40,7 +40,16 @@ export function adminRoutes() {
     const body = await c.req.json<{ quota_tokens: number }>()
 
     if (body.quota_tokens < -1) {
-      return Errors.unsupportedModel('quota_tokens must be >= -1')
+      return new Response(
+        JSON.stringify({
+          error: {
+            message: 'quota_tokens must be >= -1',
+            type: 'invalid_request_error',
+            code: 'invalid_parameter',
+          },
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      )
     }
 
     // Upsert user_quotas

@@ -59,7 +59,7 @@ export function proxyRoutes() {
       route = await routerService.resolveRoute(body.model)
     } catch {
       // Route not configured — refund reserved quota and return 503
-      keyService.settleQuota(apiKeyId, estimatedTokens, 0).catch(() => {})
+      keyService.settleQuota(apiKeyId, estimatedTokens, 0).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
       return Errors.routeNotConfigured()
     }
 
@@ -73,7 +73,7 @@ export function proxyRoutes() {
         const usage = result.data.usage
 
         // Fire-and-forget: settle quota + log usage
-        keyService.settleQuota(apiKeyId, estimatedTokens, usage.total_tokens).catch(() => {})
+        keyService.settleQuota(apiKeyId, estimatedTokens, usage.total_tokens).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
         const logEntry: UsageLogEntry = {
           apiKeyId,
           modelTag: route.tag,
@@ -84,7 +84,7 @@ export function proxyRoutes() {
           latencyMs,
           status: 'success',
         }
-        usageLogger.logUsage(logEntry).catch(() => {})
+        usageLogger.logUsage(logEntry).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
 
         return c.json(result.data)
       }
@@ -110,7 +110,7 @@ export function proxyRoutes() {
           const latencyMs = Date.now() - startTime
           const usage = result.usage
 
-          keyService.settleQuota(apiKeyId, estimatedTokens, usage.total_tokens).catch(() => {})
+          keyService.settleQuota(apiKeyId, estimatedTokens, usage.total_tokens).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
           const logEntry: UsageLogEntry = {
             apiKeyId,
             modelTag: route.tag,
@@ -121,13 +121,13 @@ export function proxyRoutes() {
             latencyMs,
             status: 'success',
           }
-          usageLogger.logUsage(logEntry).catch(() => {})
+          usageLogger.logUsage(logEntry).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
         }
       })
     } catch (err) {
       // Upstream error — refund full quota + log error
       const latencyMs = Date.now() - startTime
-      keyService.settleQuota(apiKeyId, estimatedTokens, 0).catch(() => {})
+      keyService.settleQuota(apiKeyId, estimatedTokens, 0).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
       const logEntry: UsageLogEntry = {
         apiKeyId,
         modelTag: route.tag,
@@ -138,7 +138,7 @@ export function proxyRoutes() {
         latencyMs,
         status: 'error',
       }
-      usageLogger.logUsage(logEntry).catch(() => {})
+      usageLogger.logUsage(logEntry).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
       // Re-throw so the error handler returns the correct status
       throw err
     }
@@ -163,26 +163,73 @@ export function proxyRoutes() {
    */
   router.get('/usage/summary', async (c) => {
     const apiKeyId = c.get('apiKeyId') as string
+    const period = c.req.query('period') ?? 'all'
 
-    const { data } = await supabaseAdmin
+    // Build query with period filter
+    let query = supabaseAdmin
       .from('usage_logs')
-      .select('*')
+      .select('model_tag, prompt_tokens, completion_tokens, total_tokens')
       .eq('api_key_id', apiKeyId)
 
+    if (period !== 'all') {
+      const periodMs: Record<string, number> = {
+        '24h': 24 * 60 * 60 * 1000,
+        '7d': 7 * 24 * 60 * 60 * 1000,
+        '30d': 30 * 24 * 60 * 60 * 1000,
+      }
+      const ms = periodMs[period]
+      if (ms) {
+        const since = new Date(Date.now() - ms).toISOString()
+        query = query.gte('created_at', since)
+      }
+    }
+
+    const { data } = await query
+
     const logs = (data ?? []) as Array<{
+      model_tag: string
       prompt_tokens: number
       completion_tokens: number
       total_tokens: number
     }>
 
-    const summary = {
-      total_requests: logs.length,
-      total_prompt_tokens: logs.reduce((sum, l) => sum + (l.prompt_tokens ?? 0), 0),
-      total_completion_tokens: logs.reduce((sum, l) => sum + (l.completion_tokens ?? 0), 0),
-      total_tokens: logs.reduce((sum, l) => sum + (l.total_tokens ?? 0), 0),
-    }
+    // Calculate totals
+    const totalTokens = logs.reduce((sum, l) => sum + (l.total_tokens ?? 0), 0)
+    const totalRequests = logs.length
 
-    return c.json(summary)
+    // Build breakdown by model_tag
+    const breakdownMap = new Map<string, { tokens: number; requests: number }>()
+    for (const l of logs) {
+      const tag = l.model_tag ?? 'unknown'
+      const entry = breakdownMap.get(tag) ?? { tokens: 0, requests: 0 }
+      entry.tokens += l.total_tokens ?? 0
+      entry.requests += 1
+      breakdownMap.set(tag, entry)
+    }
+    const breakdown = Array.from(breakdownMap.entries()).map(([model_tag, v]) => ({
+      model_tag,
+      tokens: v.tokens,
+      requests: v.requests,
+    }))
+
+    // Get quota_remaining from api_keys
+    const { data: keyData } = await supabaseAdmin
+      .from('api_keys')
+      .select('quota_tokens')
+      .eq('id', apiKeyId)
+      .single()
+
+    const quotaTokens = (keyData as { quota_tokens: number } | null)?.quota_tokens ?? -1
+    const quotaRemaining = quotaTokens === -1 ? -1 : Math.max(0, quotaTokens)
+
+    return c.json({
+      data: {
+        total_tokens: totalTokens,
+        total_requests: totalRequests,
+        quota_remaining: quotaRemaining,
+        breakdown,
+      },
+    })
   })
 
   return router

@@ -309,24 +309,37 @@ describe('Proxy Routes', () => {
   // ────────────────────────────────────────────────────────────────
   describe('GET /v1/usage/summary', () => {
     it('should return usage stats for authenticated user', async () => {
+      // First supabase call: usage_logs query (select → eq → resolves)
       const usageChain = {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockResolvedValue({
           data: [
-            { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
-            { prompt_tokens: 20, completion_tokens: 10, total_tokens: 30 },
+            { model_tag: 'apex-smart', prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+            { model_tag: 'apex-cheap', prompt_tokens: 20, completion_tokens: 10, total_tokens: 30 },
           ],
           error: null,
         }),
       }
+      // Second supabase call: api_keys quota query (select → eq → single → resolves)
+      const keyChain = {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({
+          data: { quota_tokens: 50000 },
+          error: null,
+        }),
+      }
       mockSupabaseFrom.mockReturnValueOnce(usageChain)
+      mockSupabaseFrom.mockReturnValueOnce(keyChain)
 
       const res = await app.request('/v1/usage/summary', { method: 'GET' })
 
       expect(res.status).toBe(200)
       const json = await res.json()
-      expect(json.total_requests).toBe(2)
-      expect(json.total_tokens).toBe(45)
+      // Response is wrapped in data: { ... }
+      expect(json.data.total_requests).toBe(2)
+      expect(json.data.total_tokens).toBe(45)
+      expect(json.data.quota_remaining).toBe(50000)
     })
   })
 })

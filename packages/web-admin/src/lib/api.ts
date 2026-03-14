@@ -143,7 +143,7 @@ export function makeAdminApi(token: string) {
       const params = new URLSearchParams();
       if (query.model_tag) params.set("model_tag", query.model_tag);
       if (query.page !== undefined) params.set("page", String(query.page));
-      if (query.per_page !== undefined) params.set("per_page", String(query.per_page));
+      if (query.per_page !== undefined) params.set("limit", String(query.per_page));
       const qs = params.toString();
       return apiGet<PaginatedLogs>(`/admin/usage-logs${qs ? `?${qs}` : ""}`, token);
     },

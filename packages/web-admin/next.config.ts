@@ -3,6 +3,8 @@ import path from 'path'
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: path.join(__dirname, '../../'),
+  typescript: { ignoreBuildErrors: false },
+  eslint: { ignoreDuringBuilds: false },
 }
 
 export default nextConfig
