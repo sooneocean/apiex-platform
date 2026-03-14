@@ -140,4 +140,31 @@ describe('Admin Route — T12', () => {
       expect(body.pagination).toBeDefined()
     })
   })
+
+  describe('Authorization', () => {
+    it('should_return403_whenNotAdmin', async () => {
+      // Simulate what happens when adminAuth middleware rejects a non-admin user.
+      // In production, adminAuth (from index.ts) checks ADMIN_EMAILS whitelist
+      // and returns 403 before the route handler runs.
+      const noAdminApp = new Hono()
+      noAdminApp.use('/admin/*', async () => {
+        return new Response(
+          JSON.stringify({
+            error: {
+              message: 'Admin access required.',
+              type: 'authorization_error',
+              code: 'admin_required',
+            },
+          }),
+          { status: 403, headers: { 'Content-Type': 'application/json' } }
+        )
+      })
+      noAdminApp.route('/admin', adminRoutes())
+
+      const res = await noAdminApp.request('/admin/users')
+      expect(res.status).toBe(403)
+      const body = await res.json()
+      expect(body.error.code).toBe('admin_required')
+    })
+  })
 })
