@@ -1,0 +1,6 @@
+{
+  "framework": "nextjs",
+  "buildCommand": "pnpm --filter @apiex/web-admin build",
+  "installCommand": "pnpm install --filter @apiex/web-admin",
+  "outputDirectory": "packages/web-admin/.next"
+}
