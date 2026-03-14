@@ -1,0 +1,30 @@
+# Repository-level Codex adapter configuration
+# Machine-specific overrides stay in ~/.codex/config.toml
+#
+# This repo supports two Codex execution modes:
+# 1. Primary Development  -> direct repo development following the same SOP model as Claude
+# 2. Review Execution     -> restricted review-only mode when Codex is invoked as R1/reviewer
+#
+# Repo behavior is governed by:
+# - AGENTS.md
+# - dev/specs/_shared/primary-development-contract.md
+# - dev/specs/_shared/review-execution-contract.md
+# - dev/specs/_shared/dangerous-ops-contract.md
+# - dev/specs/_shared/sdd-context-contract.md
+#
+# Codex does not have Claude-style hooks. Adapter differences live here;
+# behavioral parity still follows the shared SOP/contracts/stage artifacts.
+
+[mcp_servers.sequential-thinking]
+command = "npx"
+args = ["@modelcontextprotocol/server-sequential-thinking"]
+startup_timeout_sec = 20
+
+# setup.sh may append stack-specific MCP servers below when a selected stack
+# provides a repo-safe Codex config snippet.
+# Keep repo-level config minimal and deterministic.
+#
+# [mcp_servers.genaiToolbox_by_project_tools]
+# command = "toolbox"
+# args = ["--stdio", "--tools-file", "tools.yaml"]
+# startup_timeout_sec = 20

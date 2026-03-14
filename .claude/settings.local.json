@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git status)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(git branch*)",
+      "Bash(git checkout*)",
+      "Bash(git stash*)",
+      "Bash(git show*)",
+      "Bash(git merge*)",
+      "Bash(ls *)",
+      "Bash(wc *)",
+      "Bash(which *)",
+      "Bash(date *)",
+      "Bash(mkdir *)",
+      "Bash(jq *)",
+      "Bash(curl *)",
+      "mcp__sequential-thinking__sequentialthinking",
+      "Bash(cat:*)"
+    ],
+    "deny": []
+  },
+  "enableAllProjectMcpServers": true
+}

@@ -1,0 +1,408 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-03-08T10:36:35.705241+08:00",
+  "commands": [
+    {
+      "name": "audit-converge",
+      "description": "Audit 收斂迴圈 — 自動循環 spec-audit → fix 直到 P0=P1=P2=0 或達 10 輪上限。觸發：「audit 收斂」「audit converge」「一直審計到沒問題」「自動修到好」「audit loop」",
+      "file": ".claude/commands/audit-converge.md",
+      "category": "review"
+    },
+    {
+      "name": "audit-fix",
+      "description": "Audit-Fix 迴圈 — Codex 審計 spec vs codebase 差距，再 Codex 修復。可反覆觸發持續收斂。觸發：「audit fix」「審計修復」「codex 審計」「找問題修」「audit-fix」",
+      "file": ".claude/commands/audit-fix.md",
+      "category": "review"
+    },
+    {
+      "name": "architecture",
+      "description": "系統架構文件生成 - 分析專案架構並產出 ARCHITECTURE.md。觸發：「架構文件」、「architecture」、「系統架構」、「更新架構」、「架構分析」",
+      "file": ".claude/commands/architecture.md",
+      "category": "tool"
+    },
+    {
+      "name": "autopilot",
+      "description": "Autopilot 模式 — 自然語言觸發 SOP 全自動執行。S0 人工確認後 S1~S7 自動完成。觸發：「autopilot」、「自動模式」、「全自動」",
+      "file": ".claude/commands/autopilot.md",
+      "category": "sop"
+    },
+    {
+      "name": "code-review",
+      "description": "Code Review（獨立使用）- 審查程式碼變更，不需要在 SOP 流程中。觸發：「審查 code」、「review code」、「幫我看一下程式碼」",
+      "file": ".claude/commands/code-review.md",
+      "category": "review"
+    },
+    {
+      "name": "cross-validate",
+      "description": "多視角交叉驗證 — 並行派出多個專業 Agent 從不同角度分析已實作的程式碼，合成矛盾與共識報告。比 code-review 更廣（4 視角），比 review-dialogue 更輕（無多輪對話）。觸發：「交叉驗證」、「cross validate」、「多角度分析」、「全面檢查」、「幫我從各個角度看一下」、「xval」",
+      "file": ".claude/commands/cross-validate.md",
+      "category": "review"
+    },
+    {
+      "name": "debug",
+      "description": "Debug 輔助 - 針對錯誤進行根因分析與修復建議。觸發：runtime 錯誤、build 失敗、測試失敗。不用於 lint warnings 或 style 建議。",
+      "file": ".claude/commands/debug.md",
+      "category": "tool"
+    },
+    {
+      "name": "demo",
+      "description": "Demo 環境 - 啟動 dev server + Cloudflare Tunnel，產生公開 HTTPS URL 供測試。觸發：「demo」、「tunnel」、「開隧道」、「測試環境」",
+      "file": ".claude/commands/demo.md",
+      "category": "tool"
+    },
+    {
+      "name": "disk-cleanup",
+      "description": "清理 AI 工具 session 殘留檔案。觸發：「清理磁碟」、「disk cleanup」、「清 session」、「clean sessions」",
+      "file": ".claude/commands/disk-cleanup.md",
+      "category": "tool"
+    },
+    {
+      "name": "explore",
+      "description": "輕量探索 - 評估可行性、估算範圍。純讀取，不觸發 SOP。觸發：「看看能不能」、「評估」、「feasibility」、「探索」、「scope check」、「能做嗎」、「大概要改哪裡」",
+      "file": ".claude/commands/explore.md",
+      "category": "tool"
+    },
+    {
+      "name": "git-analyze",
+      "description": "Git 分支分析 - 查看其他分支的 commit、diff、變更內容。觸發：「分析分支」、「看一下 xxx 分支」",
+      "file": ".claude/commands/git-analyze.md",
+      "category": "git"
+    },
+    {
+      "name": "git-extract",
+      "description": "Git 內容提取 - 從分支提取有價值的變更，生成 Spec 進入 S0~S7。觸發：「提取」、「extract」、「拿過來」",
+      "file": ".claude/commands/git-extract.md",
+      "category": "git"
+    },
+    {
+      "name": "git-merge",
+      "description": "Git 合併評估 - 分析衝突風險，建議合併策略。觸發：「合併」、「merge」、「可以合嗎」",
+      "file": ".claude/commands/git-merge.md",
+      "category": "git"
+    },
+    {
+      "name": "handoff",
+      "description": "對話過場 - 整理當前對話上下文與下一步，用於跨視窗橋接。自動偵測 SOP 模式精簡輸出。",
+      "file": ".claude/commands/handoff.md",
+      "category": "tool"
+    },
+    {
+      "name": "parallel-develop",
+      "description": "並行開發模式 — 透過 Git Worktree 同時開發多個獨立功能。每個功能在隔離環境中跑 S0→S4，最後統一合併 + S5/S6。觸發：「並行開發」、「parallel」、「同時做」、「worktree」",
+      "file": ".claude/commands/parallel-develop.md",
+      "category": "sop"
+    },
+    {
+      "name": "resume-id",
+      "description": "快速取得當前對話的 --resume session ID",
+      "file": ".claude/commands/resume-id.md",
+      "category": "sop"
+    },
+    {
+      "name": "review-dialogue",
+      "description": "雙 AI 對話式審查 — Claude 與 Codex 互審，直到共識。支援 spec/code/test 三種類別。觸發：「對話審查」、「dialogue review」、「跟 codex 討論 spec」",
+      "file": ".claude/commands/review-dialogue.md",
+      "category": "review"
+    },
+    {
+      "name": "s0-prepare",
+      "description": "S0 前置準備 - 互動式引導填寫 s0_requirement_input.md。在 SOP 外完成需求整理，完成後用 Mode A 快速進入 S0。觸發：「準備需求」、「填需求」、「prepare」、「/s0-prepare」",
+      "file": ".claude/commands/s0-prepare.md",
+      "category": "sop"
+    },
+    {
+      "name": "s0-understand",
+      "description": "S0 需求討論 - 互動式理解需求並產出需求共識。觸發：「開始SOP:」、「我想要」、「幫我做」、「新增功能」、新需求描述。不用於簡單問答或查詢。",
+      "file": ".claude/commands/s0-understand.md",
+      "category": "sop"
+    },
+    {
+      "name": "s1-analyze",
+      "description": "S1 技術分析 - 探索 codebase 並產出 dev_spec。僅在 SOP 管線內使用。觸發：S0 確認後自動進入、「分析影響範圍」",
+      "file": ".claude/commands/s1-analyze.md",
+      "category": "sop"
+    },
+    {
+      "name": "s2-spec-review",
+      "description": "S2 Spec 審查 - 對抗式審查 dev_spec。僅在 SOP 管線內使用，不用於獨立審查。觸發：S1 完成後自動進入",
+      "file": ".claude/commands/s2-spec-review.md",
+      "category": "sop"
+    },
+    {
+      "name": "s3-plan",
+      "description": "S3 執行計畫 - 產出波次化實作計畫。僅在 SOP 管線內使用。觸發：S2 完成後自動進入",
+      "file": ".claude/commands/s3-plan.md",
+      "category": "sop"
+    },
+    {
+      "name": "s4-implement",
+      "description": "S4 實作階段 - 依據執行計畫進行程式碼實作。僅在 SOP 管線內使用。觸發：S3 確認後進入、「實作」、「開始寫」",
+      "file": ".claude/commands/s4-implement.md",
+      "category": "sop"
+    },
+    {
+      "name": "s5-review",
+      "description": "S5 Code Review - 驗證實作是否符合 Spec。僅在 S0~S7 SOP 管線內使用，不用於獨立 review。觸發：S4 完成後自動進入",
+      "file": ".claude/commands/s5-review.md",
+      "category": "sop"
+    },
+    {
+      "name": "s6-manual-test",
+      "description": "S6 手動測試引導 - 互動式逐案引導手動 TC 測試，支援斷點續測與 compact 恢復。觸發：「手動測試」、「manual test」、「繼續測試」",
+      "file": ".claude/commands/s6-manual-test.md",
+      "category": "sop"
+    },
+    {
+      "name": "s6-test",
+      "description": "S6 測試階段 - 執行測試與缺陷閉環修復。僅在 SOP 管線內使用。觸發：S5 通過且用戶確認後進入、「測試」、「驗收」",
+      "file": ".claude/commands/s6-test.md",
+      "category": "sop"
+    },
+    {
+      "name": "s7-commit",
+      "description": "S7 提交階段 - 整理變更並提交。僅在 SOP 管線內使用。觸發：S6 通過後進入、「提交」、「commit」",
+      "file": ".claude/commands/s7-commit.md",
+      "category": "sop"
+    },
+    {
+      "name": "scope",
+      "description": "專案範疇規劃 - 專案初期進行整體 Scope 分析，產出專案架構文件。觸發：「/scope」、「專案規劃」、「scope 分析」",
+      "file": ".claude/commands/scope.md",
+      "category": "tool"
+    },
+    {
+      "name": "spec-audit",
+      "description": "Spec 深度審計 — 6 Agent 並行比對 Brief/Dev Spec 與 codebase 的完整性，含 User Flow 端到端追蹤、Test Coverage 審計與跨層交叉驗證。Use when 需要驗證 spec 與 code 一致性、追蹤 flow 完整性、檢查覆蓋率。Do NOT use when 只需單點事實確認（用 /verify）、或 code 品質審查（用 /code-review）。觸發：「審計 spec」「audit spec」「spec vs code」「追蹤 flow」「深度比對」「spec 覆蓋率」",
+      "file": ".claude/commands/spec-audit.md",
+      "category": "review"
+    },
+    {
+      "name": "spec-converge",
+      "description": "Spec 收斂迴圈 — Codex 審查 + Claude 修正，迭代至 P0=P1=P2=0。觸發：「收斂 spec」、「converge spec」、「跟 codex 對齊」、「spec 收斂」",
+      "file": ".claude/commands/spec-converge.md",
+      "category": "review"
+    },
+    {
+      "name": "spec-review",
+      "description": "Spec 審查（獨立使用）- 審查規格文件，不需要在 SOP 流程中。觸發：「審查 spec」、「review spec」",
+      "file": ".claude/commands/spec-review.md",
+      "category": "review"
+    },
+    {
+      "name": "suggest",
+      "description": "技能推薦員 — 分析意圖後推薦最佳 Skill 或組合技，產出可直接複製的執行 prompt，也可當場執行。Use when 用戶不確定該用哪個 skill、想了解可用工具、或描述了一個目標但不知從何下手。Do NOT use when 用戶已明確指定要用的 skill（直接調用該 skill）。觸發：「怎麼查」「怎麼做」「可以怎麼用」「有什麼工具」「推薦」「suggest」「該用什麼」「哪個 skill」",
+      "file": ".claude/commands/suggest.md",
+      "category": "tool"
+    },
+    {
+      "name": "verify",
+      "description": "獨立驗證探索 - 探索 codebase、查詢資料庫、核對文件，純讀取不修改。觸發：「驗證」、「確認一下」、「分析一下」、「搞清楚」、「核對」、「verify」。不用於錯誤診斷（用 /debug）或需求開發（用 SOP）。",
+      "file": ".claude/commands/verify.md",
+      "category": "tool"
+    }
+  ],
+  "agents": [
+    {
+      "name": "architect",
+      "description": "架構設計專家。S1 Phase 2 與 codebase-explorer 協作產出 dev_spec；S3 產出實作計畫。",
+      "file": ".claude/agents/architect.md",
+      "model": "opus"
+    },
+    {
+      "name": "codebase-explorer",
+      "description": "代碼探索專家。S1 階段掃描 codebase、評估影響範圍、識別風險與依賴，與 architect 協作產出 dev_spec。",
+      "file": ".claude/agents/codebase-explorer.md",
+      "model": "sonnet"
+    },
+    {
+      "name": "codex-liaison",
+      "description": "Codex 通訊專員。封裝所有 Codex CLI 互動（codex exec）、解析回應、管理 dialogue state、寫入 review_meta.json。可被 Orchestrator 並行調度。",
+      "file": ".claude/agents/codex-liaison.md",
+      "model": "sonnet"
+    },
+    {
+      "name": "debugger",
+      "description": "錯誤診斷專家。遇到錯誤、測試失敗、異常行為時主動使用。",
+      "file": ".claude/agents/debugger.md",
+      "model": "sonnet"
+    },
+    {
+      "name": "frontend-developer",
+      "description": "前端開發專家。S4 階段負責前端程式碼實作，包含 UI 元件、狀態管理、API 整合。",
+      "file": ".claude/agents/frontend-developer.md",
+      "model": "sonnet"
+    },
+    {
+      "name": "git-operator",
+      "description": "Git 操作專家。S7 階段整理變更、分類檔案、生成 commit message 並執行提交。",
+      "file": ".claude/agents/git-operator.md",
+      "model": "sonnet"
+    },
+    {
+      "name": "requirement-analyst",
+      "description": "需求分析專家。S0 階段透過互動式討論深入理解需求、痛點、目標與成功標準，產出需求共識。",
+      "file": ".claude/agents/requirement-analyst.md",
+      "model": "sonnet"
+    },
+    {
+      "name": "reviewer",
+      "description": "程式碼審查專家。S5 對抗式審查中擔任 R2 防禦者，對照 Spec 驗證實作、回應 R1 挑戰。",
+      "file": ".claude/agents/reviewer.md",
+      "model": "opus"
+    },
+    {
+      "name": "scope-planner",
+      "description": "專案範疇規劃師。專案初期進行整體 Scope 分析，產出專案架構文件。指定使用，不自動觸發。",
+      "file": ".claude/agents/scope-planner.md",
+      "model": "opus"
+    },
+    {
+      "name": "test-engineer",
+      "description": "測試工程專家。S6 階段執行測試、記錄結果、產出手動測試清單、缺陷閉環修復與驗收功能。",
+      "file": ".claude/agents/test-engineer.md",
+      "model": "sonnet"
+    },
+    {
+      "name": "uiux-designer",
+      "description": "UI/UX 設計專家。S2 規劃與 Scope 階段負責 User Flow 設計、畫面規劃、UI Spec 產出。",
+      "file": ".claude/agents/uiux-designer.md",
+      "model": "opus"
+    }
+  ],
+  "references": [
+    {
+      "name": "conductor-protocol",
+      "description": "Conductor Protocol — SDD 智慧調度協議",
+      "file": ".claude/references/conductor-protocol.md"
+    },
+    {
+      "name": "exception-discovery-framework",
+      "description": "例外情境發現框架（Exception Discovery Framework）",
+      "file": ".claude/references/exception-discovery-framework.md"
+    },
+    {
+      "name": "orchestrator-behavior",
+      "description": "Orchestrator 行為規範",
+      "file": ".claude/references/orchestrator-behavior.md"
+    },
+    {
+      "name": "review-convergence-output-schema",
+      "description": "Spec Review Output Schema — Convergence Mode",
+      "file": ".claude/references/review-convergence-output-schema.md"
+    },
+    {
+      "name": "review-output-schema",
+      "description": "Review Output Schema",
+      "file": ".claude/references/review-output-schema.md"
+    },
+    {
+      "name": "review-protocol",
+      "description": "對抗式審查協議（Review Protocol）",
+      "file": ".claude/references/review-protocol.md"
+    },
+    {
+      "name": "review-standards",
+      "description": "Spec & Code Review 審查標準",
+      "file": ".claude/references/review-standards.md"
+    },
+    {
+      "name": "sdd-context-persistence",
+      "description": "SDD Context 持久化操作手冊",
+      "file": ".claude/references/sdd-context-persistence.md"
+    },
+    {
+      "name": "sdd-context-schema",
+      "description": "SDD Context Schema v2.8.0（唯一真相）",
+      "file": ".claude/references/sdd-context-schema.md"
+    },
+    {
+      "name": "sop-full-spec",
+      "description": "SOP 完整定義（Full Specification）",
+      "file": ".claude/references/sop-full-spec.md"
+    },
+    {
+      "name": "sop-rules-detail",
+      "description": "SOP 詳細規則",
+      "file": ".claude/references/sop-rules-detail.md"
+    }
+  ],
+  "skills": [
+    {
+      "name": "auto-skill",
+      "description": "自動化知識積累系統。在任務完成時主動詢問是否記錄經驗，建立跨技能記憶層。適用於所有需要記錄最佳實踐的任務。",
+      "file": ".claude/skills/auto-skill/SKILL.md"
+    },
+    {
+      "name": "review-challenge",
+      "description": "Universal review challenger (R1). Read pre-assembled input file containing review standards, output format, and review target. Output structured findings. Trigger: '$skill-review-challenge' followed by instructions pointing to the input file.",
+      "file": ".claude/skills/review-challenge/SKILL.md"
+    },
+    {
+      "name": "review-sync",
+      "description": "Unified review orchestrator for direct review and turn-based dialogue. Supports spec/code/test scopes, context auto-assembly, structured artifacts, and patch-first SDD sync. Trigger: '$skill-review-sync' with target/mode/scope/writeback instructions.",
+      "file": ".claude/skills/review-sync/SKILL.md"
+    },
+    {
+      "name": "sop-router",
+      "description": "SOP 管線統一路由。將用戶的 SOP 意圖路由到 .claude/commands/ 對應指令並執行。觸發：$skill-sop <s0|s1|s2|s3|s4|s5|s6|s7|autopilot|resume|spec-review|spec-converge|spec-audit|audit-converge|review-dialogue|cross-validate|parallel-develop>。",
+      "file": ".claude/skills/sop-router/SKILL.md"
+    },
+    {
+      "name": "tool-router",
+      "description": "非 SOP 輔助工具路由。將用戶的工具意圖路由到 .claude/commands/ 對應指令並執行。觸發：$skill-tool <debug|explore|verify|scope|architecture|handoff|demo|git-merge|git-extract|git-analyze|disk-cleanup|code-review>。",
+      "file": ".claude/skills/tool-router/SKILL.md"
+    },
+    {
+      "name": "flowchart",
+      "description": "流程圖 HTML 渲染。從 S0 Brief Spec §4 提取 Mermaid 流程圖或用戶描述，產出可直接瀏覽的 HTML（Mermaid.js CDN）。觸發：flowchart、流程圖、畫流程圖、flow。",
+      "file": ".claude/skills/flowchart/SKILL.md"
+    },
+    {
+      "name": "project-adapt",
+      "description": "專案智慧適配。掃描 codebase 自動產生 project-profile.md（目錄結構、build 指令、coding style、技術棧推薦、repo 守則）。觸發：$skill-project-adapt <init|audit>、個人化、personalize、適配專案。",
+      "file": ".claude/skills/project-adapt/SKILL.md"
+    },
+    {
+      "name": "mockup",
+      "description": "Hi-fi HTML Mockup 原型。從 S0 畫面清單或用戶描述，產出響應式全色彩 HTML Mockup，搭配 brainstorm-server 即時預覽。觸發：mockup、原型、prototype、Hi-fi、畫長相、畫面設計、UI 原型。",
+      "file": ".claude/skills/mockup/SKILL.md"
+    },
+    {
+      "name": "wireframe",
+      "description": "Wireframe 線框圖 HTML 渲染。從 S0 Brief Spec §8 畫面清單 + flowchart.html，產出 Lo-fi 灰階線框 HTML。觸發：wireframe、線框圖、畫 wireframe、UI 草圖、畫面規劃。",
+      "file": ".claude/skills/wireframe/SKILL.md"
+    }
+  ],
+  "hooks": [
+    {
+      "name": "context-guard",
+      "file": ".claude/hooks/context-guard.sh",
+      "description": "Hook: PostToolUse (all tools) Purpose: Monitor context window usage and warn before hitting the limit  Strategy:",
+      "codex_note": "Codex does not support hooks; comply with rules manually"
+    },
+    {
+      "name": "generate-manifest",
+      "file": ".claude/hooks/generate-manifest.sh",
+      "description": "SessionStart hook: regenerate manifest + Codex skill adapters if .claude/ files changed",
+      "codex_note": "Codex does not support hooks; comply with rules manually"
+    },
+    {
+      "name": "protect-files",
+      "file": ".claude/hooks/protect-files.sh",
+      "description": "Hook: PreToolUse on Edit|Write Purpose: Block modifications to protected files (secrets, generated code, locks)",
+      "codex_note": "Codex does not support hooks; comply with rules manually"
+    },
+    {
+      "name": "sop-compact-reminder",
+      "file": ".claude/hooks/sop-compact-reminder.sh",
+      "description": "Hook: SessionStart on compact Purpose: Re-inject SOP persistent state after context window compaction  Strategy: Don't tell Claude to \"go read files\" — inject the actual data",
+      "codex_note": "Codex does not support hooks; comply with rules manually"
+    },
+    {
+      "name": "validate-sdd-context",
+      "file": ".claude/hooks/validate-sdd-context.sh",
+      "description": "Hook: PostToolUse on Edit|Write Purpose: Validate sdd_context.json invariants after write",
+      "codex_note": "Codex does not support hooks; comply with rules manually"
+    }
+  ]
+}
