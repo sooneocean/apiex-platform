@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "apiex": {
+      "command": "npx",
+      "args": ["@apiex/mcp"],
+      "env": {
+        "APIEX_API_KEY": "your-api-key-here",
+        "APIEX_BASE_URL": "http://localhost:3000"
+      }
+    }
+  }
+}
