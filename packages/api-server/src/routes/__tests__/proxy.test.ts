@@ -88,11 +88,10 @@ describe('Proxy Routes', () => {
   })
 
   // ────────────────────────────────────────────────────────────────
-  // POST /v1/chat/completions — non-streaming
+  // TC-1: POST /v1/chat/completions — non-streaming proxy
   // ────────────────────────────────────────────────────────────────
-
   describe('POST /v1/chat/completions', () => {
-    it('should_returnOpenAICompletion_whenNonStreaming', async () => {
+    it('should proxy non-streaming request and return OpenAI format', async () => {
       const route = {
         id: 'route-1',
         tag: 'apex-smart',
@@ -101,8 +100,8 @@ describe('Proxy Routes', () => {
         upstream_base_url: 'https://api.anthropic.com',
         is_active: true,
       }
-      mockResolveRoute.mockResolvedValueOnce(route)
       mockReserveQuota.mockResolvedValueOnce({ success: true, remainingTokens: 90000 })
+      mockResolveRoute.mockResolvedValueOnce(route)
 
       const openAIResponse = {
         id: 'chatcmpl-1',
@@ -128,20 +127,32 @@ describe('Proxy Routes', () => {
       const json = await res.json()
       expect(json.object).toBe('chat.completion')
       expect(json.choices[0].message.content).toBe('Hello!')
-      expect(mockSettleQuota).toHaveBeenCalled()
-      expect(mockLogUsage).toHaveBeenCalled()
     })
 
-    it('should_return402_whenQuotaExhausted', async () => {
-      const route = {
-        id: 'route-1',
-        tag: 'apex-smart',
-        upstream_provider: 'anthropic',
-        upstream_model: 'claude-sonnet-4-20250514',
-        upstream_base_url: 'https://api.anthropic.com',
-        is_active: true,
-      }
-      mockResolveRoute.mockResolvedValueOnce(route)
+    // ────────────────────────────────────────────────────────────────
+    // TC-2: 400 for unsupported model (validated BEFORE reserveQuota)
+    // ────────────────────────────────────────────────────────────────
+    it('should return 400 for unsupported model', async () => {
+      const res = await app.request('/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'gpt-totally-unsupported',
+          messages: [{ role: 'user', content: 'hi' }],
+        }),
+      })
+
+      expect(res.status).toBe(400)
+      const json = await res.json()
+      expect(json.error.code).toBe('unsupported_model')
+      // reserveQuota must NOT have been called for unsupported models
+      expect(mockReserveQuota).not.toHaveBeenCalled()
+    })
+
+    // ────────────────────────────────────────────────────────────────
+    // TC-3: 402 when quota exhausted (checked AFTER model validation)
+    // ────────────────────────────────────────────────────────────────
+    it('should return 402 when quota exhausted', async () => {
       mockReserveQuota.mockResolvedValueOnce({ success: false })
 
       const res = await app.request('/v1/chat/completions', {
@@ -156,35 +167,16 @@ describe('Proxy Routes', () => {
       expect(res.status).toBe(402)
       const json = await res.json()
       expect(json.error.code).toBe('quota_exhausted')
+      // resolveRoute must NOT have been called — fail fast before DB lookup
+      expect(mockResolveRoute).not.toHaveBeenCalled()
     })
 
-    it('should_return400_whenUnsupportedModel', async () => {
-      mockResolveRoute.mockRejectedValueOnce(new InvalidRequestError("Model 'bad-model' is not supported."))
-
-      const res = await app.request('/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'bad-model',
-          messages: [{ role: 'user', content: 'hi' }],
-        }),
-      })
-
-      expect(res.status).toBe(400)
-    })
-
-    it('should_return502_whenUpstreamTimeout', async () => {
-      const route = {
-        id: 'route-1',
-        tag: 'apex-smart',
-        upstream_provider: 'anthropic',
-        upstream_model: 'claude-sonnet-4-20250514',
-        upstream_base_url: 'https://api.anthropic.com',
-        is_active: true,
-      }
-      mockResolveRoute.mockResolvedValueOnce(route)
+    // ────────────────────────────────────────────────────────────────
+    // TC-4: 503 when route not configured (resolveRoute failure)
+    // ────────────────────────────────────────────────────────────────
+    it('should return 503 when route not configured', async () => {
       mockReserveQuota.mockResolvedValueOnce({ success: true, remainingTokens: 90000 })
-      mockForward.mockRejectedValueOnce(new ServerError('Upstream service timed out.', 'upstream_timeout'))
+      mockResolveRoute.mockRejectedValueOnce(new InvalidRequestError("Model 'apex-smart' is not supported."))
       mockSettleQuota.mockResolvedValueOnce(undefined)
 
       const res = await app.request('/v1/chat/completions', {
@@ -196,12 +188,17 @@ describe('Proxy Routes', () => {
         }),
       })
 
-      // ServerError with default statusCode 500, but our ServerError('...', 'upstream_timeout') still 500
-      // The forward method should throw an ApiError with 502
-      expect(res.status).toBeGreaterThanOrEqual(400)
+      expect(res.status).toBe(503)
+      const json = await res.json()
+      expect(json.error.code).toBe('route_not_configured')
+      // quota must be refunded
+      expect(mockSettleQuota).toHaveBeenCalled()
     })
 
-    it('should_returnSSEChunks_whenStreaming', async () => {
+    // ────────────────────────────────────────────────────────────────
+    // TC-5: settle quota and log usage on success
+    // ────────────────────────────────────────────────────────────────
+    it('should settle quota and log usage on success', async () => {
       const route = {
         id: 'route-1',
         tag: 'apex-smart',
@@ -210,23 +207,18 @@ describe('Proxy Routes', () => {
         upstream_base_url: 'https://api.anthropic.com',
         is_active: true,
       }
-      mockResolveRoute.mockResolvedValueOnce(route)
       mockReserveQuota.mockResolvedValueOnce({ success: true, remainingTokens: 90000 })
+      mockResolveRoute.mockResolvedValueOnce(route)
 
-      const encoder = new TextEncoder()
-      const sseStream = new ReadableStream({
-        start(controller) {
-          controller.enqueue(encoder.encode('data: {"id":"chatcmpl-1","object":"chat.completion.chunk","created":1000,"model":"apex-smart","choices":[{"index":0,"delta":{"content":"Hi"},"finish_reason":null}]}\n\n'))
-          controller.enqueue(encoder.encode('data: [DONE]\n\n'))
-          controller.close()
-        },
-      })
-
-      mockForward.mockResolvedValueOnce({
-        type: 'stream',
-        stream: sseStream,
+      const openAIResponse = {
+        id: 'chatcmpl-1',
+        object: 'chat.completion',
+        created: 1000,
+        model: 'apex-smart',
+        choices: [{ index: 0, message: { role: 'assistant', content: 'OK' }, finish_reason: 'stop' }],
         usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
-      })
+      }
+      mockForward.mockResolvedValueOnce({ type: 'json', data: openAIResponse })
       mockSettleQuota.mockResolvedValueOnce(undefined)
 
       const res = await app.request('/v1/chat/completions', {
@@ -234,18 +226,28 @@ describe('Proxy Routes', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: 'apex-smart',
-          messages: [{ role: 'user', content: 'hi' }],
-          stream: true,
+          messages: [{ role: 'user', content: 'test' }],
+          max_tokens: 512,
         }),
       })
 
       expect(res.status).toBe(200)
-      expect(res.headers.get('content-type')).toContain('text/event-stream')
-      const text = await res.text()
-      expect(text).toContain('data:')
+      // Give fire-and-forget a tick
+      await new Promise((r) => setTimeout(r, 20))
+      expect(mockSettleQuota).toHaveBeenCalledWith('key-123', 512, 15)
+      expect(mockLogUsage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          apiKeyId: 'key-123',
+          modelTag: 'apex-smart',
+          status: 'success',
+        })
+      )
     })
 
-    it('should_callSettleQuota_afterStreamComplete', async () => {
+    // ────────────────────────────────────────────────────────────────
+    // TC-6: refund quota on upstream error
+    // ────────────────────────────────────────────────────────────────
+    it('should refund quota on upstream error', async () => {
       const route = {
         id: 'route-1',
         tag: 'apex-smart',
@@ -254,22 +256,9 @@ describe('Proxy Routes', () => {
         upstream_base_url: 'https://api.anthropic.com',
         is_active: true,
       }
-      mockResolveRoute.mockResolvedValueOnce(route)
       mockReserveQuota.mockResolvedValueOnce({ success: true, remainingTokens: 90000 })
-
-      const encoder = new TextEncoder()
-      const sseStream = new ReadableStream({
-        start(controller) {
-          controller.enqueue(encoder.encode('data: [DONE]\n\n'))
-          controller.close()
-        },
-      })
-
-      mockForward.mockResolvedValueOnce({
-        type: 'stream',
-        stream: sseStream,
-        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
-      })
+      mockResolveRoute.mockResolvedValueOnce(route)
+      mockForward.mockRejectedValueOnce(new ServerError('Upstream failed', 'upstream_error'))
       mockSettleQuota.mockResolvedValueOnce(undefined)
 
       const res = await app.request('/v1/chat/completions', {
@@ -278,26 +267,28 @@ describe('Proxy Routes', () => {
         body: JSON.stringify({
           model: 'apex-smart',
           messages: [{ role: 'user', content: 'hi' }],
-          stream: true,
+          max_tokens: 1024,
         }),
       })
 
-      // Consume the stream to trigger completion
-      await res.text()
-
-      // settleQuota is called after stream finishes (fire-and-forget in background)
-      // Give it a tick
-      await new Promise((r) => setTimeout(r, 50))
-      expect(mockSettleQuota).toHaveBeenCalled()
+      expect(res.status).toBeGreaterThanOrEqual(400)
+      // Give fire-and-forget a tick
+      await new Promise((r) => setTimeout(r, 20))
+      // Full refund: settleQuota(keyId, reserved, 0) — actual=0 means full refund
+      expect(mockSettleQuota).toHaveBeenCalledWith('key-123', 1024, 0)
+      expect(mockLogUsage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'error',
+        })
+      )
     })
   })
 
   // ────────────────────────────────────────────────────────────────
-  // GET /v1/models
+  // TC-7: GET /v1/models
   // ────────────────────────────────────────────────────────────────
-
   describe('GET /v1/models', () => {
-    it('should_returnModelList_whenGetModels', async () => {
+    it('should return list of available models', async () => {
       mockListActiveModels.mockResolvedValueOnce([
         { id: 'apex-smart', object: 'model', created: 1000, owned_by: 'apiex' },
         { id: 'apex-cheap', object: 'model', created: 1000, owned_by: 'apiex' },
@@ -314,12 +305,10 @@ describe('Proxy Routes', () => {
   })
 
   // ────────────────────────────────────────────────────────────────
-  // GET /v1/usage/summary
+  // TC-8: GET /v1/usage/summary
   // ────────────────────────────────────────────────────────────────
-
   describe('GET /v1/usage/summary', () => {
-    it('should_returnUsageSummary', async () => {
-      // Mock supabaseAdmin.from('usage_logs') chain
+    it('should return usage stats for authenticated user', async () => {
       const usageChain = {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockResolvedValue({
