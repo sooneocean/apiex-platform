@@ -881,7 +881,7 @@
         "started_at": "2026-03-15T01:45:00+08:00",
         "completed_at": "2026-03-15T01:50:00+08:00",
         "output": {
-          "commit_hash": "",
+          "commit_hash": "e8daa7c",
           "branch": "main",
           "changes": [
             "packages/api-server/src/adapters/GeminiAdapter.ts",

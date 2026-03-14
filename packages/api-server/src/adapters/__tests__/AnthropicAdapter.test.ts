@@ -49,7 +49,7 @@ describe('AnthropicAdapter', () => {
     expect(result.choices).toHaveLength(1)
     expect(result.choices[0].message.role).toBe('assistant')
     expect(result.choices[0].message.content).toBe('Hello')
-    expect(result.choices[0].finish_reason).toBe('end_turn')
+    expect(result.choices[0].finish_reason).toBe('stop')
     expect(result.usage.prompt_tokens).toBe(12)
     expect(result.usage.completion_tokens).toBe(8)
     expect(result.usage.total_tokens).toBe(20)

@@ -105,7 +105,16 @@ export function adminRoutes() {
       .select('*', { count: 'exact' })
 
     if (userId) {
-      query = query.eq('user_id', userId)
+      // usage_logs has no user_id column — filter via api_keys join
+      const { data: userKeys } = await supabaseAdmin
+        .from('api_keys')
+        .select('id')
+        .eq('user_id', userId)
+      const keyIds = (userKeys ?? []).map((k: { id: string }) => k.id)
+      if (keyIds.length === 0) {
+        return c.json({ data: [], pagination: { page, limit, total: 0 } })
+      }
+      query = query.in('api_key_id', keyIds)
     }
     if (modelTag) {
       query = query.eq('model_tag', modelTag)

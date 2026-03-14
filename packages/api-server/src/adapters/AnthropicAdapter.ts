@@ -7,6 +7,22 @@ import type {
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY ?? ''
 
+/**
+ * Map Anthropic stop_reason to OpenAI finish_reason.
+ * Anthropic: end_turn, max_tokens, stop_sequence, tool_use
+ * OpenAI:    stop,     length,     stop,           tool_calls
+ */
+const FINISH_REASON_MAP: Record<string, string> = {
+  'end_turn': 'stop',
+  'max_tokens': 'length',
+  'stop_sequence': 'stop',
+  'tool_use': 'tool_calls',
+}
+
+function mapFinishReason(reason: string): string {
+  return FINISH_REASON_MAP[reason] ?? 'stop'
+}
+
 export class AnthropicAdapter implements ProviderAdapter {
   transformRequest(body: OpenAIRequest, upstreamModel: string): unknown {
     const messages = body.messages ?? []
@@ -63,7 +79,7 @@ export class AnthropicAdapter implements ProviderAdapter {
         {
           index: 0,
           message: { role: 'assistant', content: textContent },
-          finish_reason: res.stop_reason,
+          finish_reason: mapFinishReason(res.stop_reason),
         },
       ],
       usage: {
