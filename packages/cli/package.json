@@ -1,0 +1,26 @@
+{
+  "name": "@apiex/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "apiex": "./dist/index.js"
+  },
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsup src/index.ts --format esm --dts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "tsup": "^8.3.0",
+    "vitest": "^2.1.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}
