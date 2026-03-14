@@ -4,6 +4,10 @@ import { serve } from '@hono/node-server'
 import { ApiError, Errors } from './lib/errors.js'
 import { apiKeyAuth } from './middleware/apiKeyAuth.js'
 import { supabaseJwtAuth, adminAuth } from './middleware/adminAuth.js'
+import { proxyRoutes } from './routes/proxy.js'
+import { authRoutes } from './routes/auth.js'
+import { keysRoutes } from './routes/keys.js'
+import { adminRoutes } from './routes/admin.js'
 
 export function createApp() {
   const app = new Hono()
@@ -27,30 +31,26 @@ export function createApp() {
   // Proxy routes (API Key auth)
   const v1 = new Hono()
   v1.use('*', apiKeyAuth)
-  // T09 will add: v1.post('/chat/completions', proxyHandler)
-  // T09 will add: v1.get('/models', modelsHandler)
+  v1.route('/', proxyRoutes())
   app.route('/v1', v1)
 
   // Auth routes (no auth required for login)
-  const auth = new Hono()
-  // T10 will add auth routes
-  app.route('/auth', auth)
+  app.route('/auth', authRoutes())
 
   // Keys routes (Supabase JWT auth)
   const keys = new Hono()
   keys.use('*', supabaseJwtAuth)
-  // T11 will add keys CRUD routes
+  keys.route('/', keysRoutes())
   app.route('/keys', keys)
 
-  // Usage routes (API Key or JWT)
+  // Usage routes (API Key or JWT) — usage/summary is served under /v1/usage/summary via proxy routes
   const usage = new Hono()
-  // T09 will add usage summary
   app.route('/usage', usage)
 
   // Admin routes (Admin JWT auth)
   const admin = new Hono()
   admin.use('*', adminAuth)
-  // T12 will add admin routes
+  admin.route('/', adminRoutes())
   app.route('/admin', admin)
 
   // 404 catch-all
