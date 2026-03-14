@@ -10,19 +10,21 @@ const mockCreateKey = vi.fn()
 const mockListKeys = vi.fn()
 const mockRevokeKey = vi.fn()
 
-vi.mock('../../services/KeyService.js', () => ({
-  KeyService: vi.fn().mockImplementation(() => ({
-    createKey: (...args: unknown[]) => mockCreateKey(...args),
-    listKeys: (...args: unknown[]) => mockListKeys(...args),
-    revokeKey: (...args: unknown[]) => mockRevokeKey(...args),
-  })),
-}))
+vi.mock('../../services/KeyService.js', () => {
+  return {
+    KeyService: class {
+      createKey(...args: unknown[]) { return mockCreateKey(...args) }
+      listKeys(...args: unknown[]) { return mockListKeys(...args) }
+      revokeKey(...args: unknown[]) { return mockRevokeKey(...args) }
+    },
+  }
+})
 
 vi.mock('../../lib/supabase.js', () => ({
   supabaseAdmin: { from: vi.fn() },
 }))
 
-const { keysRoutes } = await import('../keys.js')
+const { keysRoutes, _resetRateLimiter } = await import('../keys.js')
 
 /**
  * Helper: create app with fake auth middleware injecting userId.
@@ -45,6 +47,7 @@ describe('Keys Route — T11', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    _resetRateLimiter()
     app = createTestApp()
   })
 

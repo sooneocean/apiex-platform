@@ -1,12 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+const { mockFrom } = vi.hoisted(() => ({
+  mockFrom: vi.fn(),
+}))
+
 // Mock @supabase/supabase-js
 vi.mock('@supabase/supabase-js', () => ({
   createClient: vi.fn(() => ({})),
 }))
 
 // Mock supabaseAdmin
-const mockFrom = vi.fn()
 vi.mock('../../lib/supabase.js', () => ({
   supabaseAdmin: { from: mockFrom },
   supabaseClient: {},
