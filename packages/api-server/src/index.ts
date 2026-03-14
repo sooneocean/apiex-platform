@@ -1,17 +1,21 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { Errors } from './lib/errors.js'
+import { serve } from '@hono/node-server'
+import { ApiError, Errors } from './lib/errors.js'
 import { apiKeyAuth } from './middleware/apiKeyAuth.js'
 import { supabaseJwtAuth, adminAuth } from './middleware/adminAuth.js'
 
 export function createApp() {
   const app = new Hono()
 
-  // Global CORS
+  // Global CORS — allow all origins in development, restrict in production
+  const isDev = process.env.NODE_ENV !== 'production'
   app.use(
     '*',
     cors({
-      origin: ['http://localhost:3001', process.env.WEB_ADMIN_URL ?? ''].filter(Boolean),
+      origin: isDev
+        ? '*'
+        : [process.env.WEB_ADMIN_URL ?? 'http://localhost:3001'].filter(Boolean),
       allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
       allowHeaders: ['Content-Type', 'Authorization'],
     })
@@ -52,8 +56,11 @@ export function createApp() {
   // 404 catch-all
   app.notFound(() => Errors.notFound())
 
-  // Global error handler
+  // Global error handler — returns OpenAI-compatible format
   app.onError((err, c) => {
+    if (err instanceof ApiError) {
+      return err.toResponse()
+    }
     console.error('Unhandled error:', err)
     return Errors.internalError()
   })
@@ -61,11 +68,15 @@ export function createApp() {
   return app
 }
 
-// Start server when run directly
-const app = createApp()
-const port = Number(process.env.PORT ?? 3000)
+// Start server when run directly (not during testing)
+if (process.env.NODE_ENV !== 'test') {
+  const app = createApp()
+  const port = Number(process.env.PORT ?? 3000)
 
-export default {
-  port,
-  fetch: app.fetch,
+  serve({
+    fetch: app.fetch,
+    port,
+  }, (info) => {
+    console.log(`Apiex API Server listening on http://localhost:${info.port}`)
+  })
 }

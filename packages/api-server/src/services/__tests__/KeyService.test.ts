@@ -1,8 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createHash } from 'crypto'
 
+// Mock @supabase/supabase-js to prevent real URL validation during module load
+vi.mock('@supabase/supabase-js', () => ({
+  createClient: vi.fn(() => ({})),
+}))
+
 // Mock supabaseAdmin before importing KeyService
-vi.mock('../../../lib/supabase.js', () => {
+vi.mock('../../lib/supabase.js', () => {
   const mockChain = {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
@@ -16,10 +21,11 @@ vi.mock('../../../lib/supabase.js', () => {
       from: vi.fn().mockReturnValue(mockChain),
       rpc: vi.fn(),
     },
+    supabaseClient: {},
   }
 })
 
-import { supabaseAdmin } from '../../../lib/supabase.js'
+import { supabaseAdmin } from '../../lib/supabase.js'
 import { KeyService } from '../KeyService.js'
 
 // Helper to get the fluent mock chain from supabaseAdmin.from(...)

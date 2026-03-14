@@ -10,6 +10,56 @@ export interface OpenAIError {
   }
 }
 
+// --- Custom Error Classes ---
+
+export class ApiError extends Error {
+  public readonly statusCode: number
+  public readonly type: string
+  public readonly code: string
+
+  constructor(message: string, statusCode: number, type: string, code: string) {
+    super(message)
+    this.name = 'ApiError'
+    this.statusCode = statusCode
+    this.type = type
+    this.code = code
+  }
+
+  toResponse(): Response {
+    return makeError(this.message, this.type, this.code, this.statusCode)
+  }
+}
+
+export class AuthenticationError extends ApiError {
+  constructor(message = 'Invalid API key.', code = 'invalid_api_key') {
+    super(message, 401, 'authentication_error', code)
+    this.name = 'AuthenticationError'
+  }
+}
+
+export class InvalidRequestError extends ApiError {
+  constructor(message: string, code = 'invalid_request') {
+    super(message, 400, 'invalid_request_error', code)
+    this.name = 'InvalidRequestError'
+  }
+}
+
+export class InsufficientQuotaError extends ApiError {
+  constructor(message = 'Quota exhausted.', code = 'quota_exhausted') {
+    super(message, 402, 'insufficient_quota', code)
+    this.name = 'InsufficientQuotaError'
+  }
+}
+
+export class ServerError extends ApiError {
+  constructor(message = 'An internal server error occurred.', code = 'internal_error') {
+    super(message, 500, 'server_error', code)
+    this.name = 'ServerError'
+  }
+}
+
+// --- Response factory ---
+
 export function makeError(message: string, type: string, code: string, status: number): Response {
   const body: OpenAIError = { error: { message, type, code } }
   return new Response(JSON.stringify(body), {

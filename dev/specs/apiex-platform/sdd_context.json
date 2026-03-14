@@ -1,0 +1,266 @@
+{
+  "sdd_context": {
+    "version": "3.0.0",
+    "feature": "apiex-platform",
+    "current_stage": "S4",
+    "spec_mode": "full",
+    "spec_mode_reason": "全新產品平台，涵蓋多個功能區（FA-A + FA-C），複雜度中等，需完整 spec 文件指導後續 S1~S7",
+    "work_type": "new_feature",
+    "spec_folder": "dev/specs/apiex-platform",
+    "execution_mode": "autopilot",
+    "status": "in_progress",
+    "started_at": "2026-03-14T00:00:00+08:00",
+    "last_updated": "2026-03-14T22:45:00+08:00",
+    "last_updated_by": "orchestrator",
+    "completed_at": null,
+    "stages": {
+      "s0": {
+        "status": "completed",
+        "agent": "requirement-analyst",
+        "started_at": "2026-03-14T00:00:00+08:00",
+        "completed_at": "2026-03-14T02:00:00+08:00",
+        "output": {
+          "brief_spec_path": "dev/specs/apiex-platform/s0_brief_spec.md",
+          "work_type": "new_feature",
+          "requirement": "建立 Apiex AI API 中轉平台 MVP，讓開發者只需替換 Base URL 與 API Key，即可透過 apex-smart/apex-cheap 路由標籤使用平台嚴選的頂尖 AI 模型，第一版以 Supabase Auth 管理帳號與 API Key，手動充值維持最小交付閉環",
+          "goal": "建立最小可交付閉環：帳號建立 + API Key 取得 + Drop-in Replacement API 呼叫成功 + apex-smart/cheap 路由正確",
+          "pain_points": [
+            "市面上 AI 模型選擇過多，開發者有選擇困難",
+            "各 API 格式不同，每次模型迭代都要改 SDK 設定",
+            "沒有可信賴的「永遠用當下最好模型」的穩定抽象層",
+            "不知道每個請求實際花了多少 token、多少錢"
+          ],
+          "success_criteria": [
+            "OpenAI SDK 僅替換 base_url 和 api_key，零程式碼修改可呼叫成功",
+            "apex-smart / apex-cheap 路由到正確上游模型",
+            "Streaming 模式格式與 OpenAI 完全相容",
+            "上游 timeout 時回傳 502，不讓請求無限懸掛",
+            "額度為 0 時回傳 402，不透傳到上游",
+            "所有請求（成功/失敗）均寫入 usage_logs"
+          ],
+          "scope_in": [
+            "FA-A：Supabase Auth 帳號系統（Email + OAuth）",
+            "FA-A：API Key 建立、列表（遮罩顯示）、撤銷",
+            "FA-A：用戶累計 Token 用量靜態顯示",
+            "FA-C：OpenAI 相容 /v1/chat/completions endpoint",
+            "FA-C：apex-smart / apex-cheap 動態路由（DB 設定）",
+            "FA-C：Streaming SSE 透傳",
+            "FA-C：手動充值額度檢查（DB 直接設定）",
+            "全域：統一 OpenAI 相容錯誤格式回傳",
+            "全域：usage_logs 記錄"
+          ],
+          "scope_out": [
+            "FA-B：Stripe 金流自助儲值",
+            "FA-B：自動計費扣款系統",
+            "FA-D：Analytics Dashboard（圖表、延遲監控、帳單分析）",
+            "FA-E：模型管理 Admin UI",
+            "Pro 訂閱制與差異化 Rate Limit",
+            "多 workspace / 團隊協作",
+            "per-key spend limit",
+            "Webhook / 用量通知"
+          ],
+          "constraints": [
+            "Auth 使用 Supabase（Auth + DB 一體）",
+            "MVP 金流跳過，管理員手動操作 DB 設定額度",
+            "後端技術棧由 S1 architect 決定（S0 建議 Monolith）",
+            "部署目標 Fly.io 或 Render（待 S1 確定）",
+            "無 Admin UI，路由設定（route_config）直接操作 Supabase DB",
+            "MVP 無 Dashboard，開發者只能看靜態累計用量數字"
+          ],
+          "functional_areas": [
+            {
+              "id": "FA-A",
+              "name": "帳號與 API Key 管理",
+              "description": "用戶透過 Supabase Auth 註冊/登入，並建立、查看（遮罩）、撤銷 API Key",
+              "independence": "high"
+            },
+            {
+              "id": "FA-C",
+              "name": "API 代理與動態路由",
+              "description": "接受 OpenAI 相容格式請求，根據 model 標籤（apex-smart/apex-cheap）路由到指定上游 LLM 並回傳結果",
+              "independence": "medium"
+            }
+          ],
+          "decomposition_strategy": "single_sop_fa_labeled",
+          "child_sops": [],
+          "frontend_design": {
+            "flowchart_path": "dev/specs/apiex-platform/frontend/flowchart.html"
+          }
+        }
+      },
+      "s1": {
+        "status": "completed",
+        "agents": ["codebase-explorer", "architect"],
+        "started_at": "2026-03-14T02:00:00+08:00",
+        "completed_at": "2026-03-14T03:00:00+08:00",
+        "output": {
+          "completed_phases": [1, 2],
+          "dev_spec_path": "dev/specs/apiex-platform/s1_dev_spec.md",
+          "api_spec_path": "dev/specs/apiex-platform/s1_api_spec.md",
+          "frontend_handoff_path": "dev/specs/apiex-platform/s1_frontend_handoff.md",
+          "impact_scope": {
+            "frontend": [
+              "packages/web-admin/src/pages/LoginPage.tsx（新增）",
+              "packages/web-admin/src/pages/DashboardPage.tsx（新增）",
+              "packages/web-admin/src/pages/ApiKeysPage.tsx（新增）",
+              "packages/web-admin/src/components/ApiKeyCard.tsx（新增）",
+              "packages/web-admin/src/components/CopyableTextField.tsx（新增）",
+              "packages/web-admin/src/components/ConfirmDialog.tsx（新增）"
+            ],
+            "backend": [
+              "packages/api-server/src/routes/proxy.ts（新增）",
+              "packages/api-server/src/routes/auth.ts（新增）",
+              "packages/api-server/src/routes/admin.ts（新增）",
+              "packages/api-server/src/services/KeyService.ts（新增）",
+              "packages/api-server/src/services/RouterService.ts（新增）",
+              "packages/api-server/src/services/UsageLogger.ts（新增）",
+              "packages/api-server/src/middleware/authMiddleware.ts（新增）",
+              "packages/mcp-server/src/index.ts（新增）",
+              "packages/cli/src/commands/login.ts（新增）",
+              "packages/cli/src/commands/keys.ts（新增）",
+              "packages/cli/src/commands/chat.ts（新增）"
+            ],
+            "database": [
+              "users（Supabase Auth 管理）",
+              "api_keys",
+              "user_quotas",
+              "usage_logs",
+              "route_config"
+            ]
+          },
+          "tasks": ["T01", "T02", "T03", "T04", "T05", "T06", "T07", "T08", "T09", "T10", "T11", "T12", "T13", "T14", "T15", "T16", "T17", "T18", "T19"],
+          "acceptance_criteria": ["AC-1", "AC-2", "AC-3", "AC-4", "AC-5", "AC-6", "AC-7", "AC-8", "AC-9", "AC-10", "AC-11", "AC-12", "AC-13", "AC-14", "AC-15", "AC-16"],
+          "assumptions": [
+            "Supabase 免費額度足夠 MVP 使用",
+            "Fly.io 支援長連線 SSE streaming",
+            "claude-opus-4-6 model ID 可用（route_config 可動態更新）"
+          ],
+          "solution_summary": "pnpm monorepo + Hono API server + AnthropicAdapter/GeminiAdapter（樂觀預扣額度機制）+ Supabase PostgreSQL + Next.js Admin UI + commander.js CLI + MCP Server，部署至 Fly.io + Vercel",
+          "tech_debt": [
+            "CLI OAuth PKCE",
+            "API Key cache",
+            "usage_logs async queue",
+            "Proxy rate limiting",
+            "Admin JWT offline verification",
+            "Model ID passthrough routing"
+          ],
+          "regression_risks": ["全新專案，無回歸風險"],
+          "risks": [
+            { "id": "R1", "description": "AnthropicAdapter streaming 轉換複雜度", "level": "High" },
+            { "id": "R2", "description": "Gemini OpenAI 相容層差異", "level": "High" },
+            { "id": "R3", "description": "API Key DB 查詢是熱路徑", "level": "High" },
+            { "id": "R4", "description": "額度並發 race condition", "level": "Medium" },
+            { "id": "R5", "description": "CLI OAuth 簡化版體驗差", "level": "Medium" },
+            { "id": "R6", "description": "MCP SDK breaking changes", "level": "Medium" },
+            { "id": "R7", "description": "Supabase RLS 設計不當", "level": "High" },
+            { "id": "R8", "description": "claude-opus-4-6 model ID 不確定", "level": "Low" },
+            { "id": "R9", "description": "Proxy 無 rate limiting", "level": "Medium" }
+          ]
+        }
+      },
+      "s2": {
+        "status": "completed",
+        "started_at": "2026-03-14T21:06:00+08:00",
+        "completed_at": "2026-03-14T21:50:00+08:00",
+        "output": {
+          "review_report_path": "dev/specs/apiex-platform/s2_review_report.md",
+          "conclusion": "conditional_pass",
+          "r1_totals": { "P0": 3, "P1": 8, "P2": 3 },
+          "post_fix_totals": { "P0": 0, "P1": 0, "P2": 0 },
+          "key_fixes": [
+            "樂觀預扣機制（reserveQuota + settleQuota）",
+            "user_quotas 表（配額模型明確化）",
+            "Scope 變更記錄（E8 retry / Happy Path C）",
+            "AnthropicAdapter 8 種 event 處理",
+            "AC-15/AC-16 新增"
+          ]
+        }
+      },
+      "s3": {
+        "status": "completed",
+        "agent": "architect",
+        "started_at": "2026-03-14T22:00:00+08:00",
+        "completed_at": "2026-03-14T22:30:00+08:00",
+        "output": {
+          "implementation_plan_path": "dev/specs/apiex-platform/s3_implementation_plan.md",
+          "waves": [
+            {
+              "wave": 1,
+              "name": "基礎設施",
+              "tasks": [
+                { "id": "T01", "name": "Monorepo 初始化", "agent": "backend-developer", "dependencies": [], "complexity": "S", "parallel": false, "tdd_plan": null }
+              ]
+            },
+            {
+              "wave": 2,
+              "name": "資料層 + 骨架",
+              "tasks": [
+                { "id": "T02", "name": "DB Schema + RLS", "agent": "backend-developer", "dependencies": ["T01"], "complexity": "M", "parallel": true, "tdd_plan": null },
+                { "id": "T03", "name": "Hono App 骨架", "agent": "backend-developer", "dependencies": ["T01"], "complexity": "M", "parallel": true, "tdd_plan": { "test_file": "packages/api-server/src/__tests__/app.test.ts", "test_command": "pnpm --filter @apiex/api-server test" } }
+              ]
+            },
+            {
+              "wave": 3,
+              "name": "核心後端服務",
+              "tasks": [
+                { "id": "T04", "name": "KeyService", "agent": "backend-developer", "dependencies": ["T02", "T03"], "complexity": "M", "parallel": true, "tdd_plan": { "test_file": "packages/api-server/src/services/__tests__/KeyService.test.ts", "test_command": "pnpm --filter @apiex/api-server test" } },
+                { "id": "T05", "name": "AnthropicAdapter", "agent": "backend-developer", "dependencies": ["T03"], "complexity": "L", "parallel": true, "tdd_plan": { "test_file": "packages/api-server/src/adapters/__tests__/AnthropicAdapter.test.ts", "test_command": "pnpm --filter @apiex/api-server test" } },
+                { "id": "T06", "name": "GeminiAdapter", "agent": "backend-developer", "dependencies": ["T03"], "complexity": "M", "parallel": true, "tdd_plan": { "test_file": "packages/api-server/src/adapters/__tests__/GeminiAdapter.test.ts", "test_command": "pnpm --filter @apiex/api-server test" } }
+              ]
+            },
+            {
+              "wave": 4,
+              "name": "Routes + RouterService",
+              "parallel": "Wave 4a (T07/T08/T10) -> Wave 4b (T09/T11/T12)",
+              "tasks": [
+                { "id": "T07", "name": "RouterService", "agent": "backend-developer", "dependencies": ["T02", "T05", "T06"], "complexity": "M", "parallel": true, "tdd_plan": { "test_file": "packages/api-server/src/services/__tests__/RouterService.test.ts", "test_command": "pnpm --filter @apiex/api-server test" } },
+                { "id": "T08", "name": "UsageLogger", "agent": "backend-developer", "dependencies": ["T02", "T03"], "complexity": "S", "parallel": true, "tdd_plan": { "test_file": "packages/api-server/src/services/__tests__/UsageLogger.test.ts", "test_command": "pnpm --filter @apiex/api-server test" } },
+                { "id": "T10", "name": "Auth Route", "agent": "backend-developer", "dependencies": ["T03"], "complexity": "S", "parallel": true, "tdd_plan": { "test_file": "packages/api-server/src/routes/__tests__/auth.test.ts", "test_command": "pnpm --filter @apiex/api-server test" } },
+                { "id": "T09", "name": "Proxy Route", "agent": "backend-developer", "dependencies": ["T04", "T07", "T08"], "complexity": "L", "parallel": true, "tdd_plan": { "test_file": "packages/api-server/src/routes/__tests__/proxy.test.ts", "test_command": "pnpm --filter @apiex/api-server test" } },
+                { "id": "T11", "name": "Keys Route", "agent": "backend-developer", "dependencies": ["T04", "T10"], "complexity": "M", "parallel": true, "tdd_plan": { "test_file": "packages/api-server/src/routes/__tests__/keys.test.ts", "test_command": "pnpm --filter @apiex/api-server test" } },
+                { "id": "T12", "name": "Admin Route", "agent": "backend-developer", "dependencies": ["T04", "T08", "T10"], "complexity": "M", "parallel": true, "tdd_plan": { "test_file": "packages/api-server/src/routes/__tests__/admin.test.ts", "test_command": "pnpm --filter @apiex/api-server test" } }
+              ]
+            },
+            {
+              "wave": 5,
+              "name": "介面層",
+              "tasks": [
+                { "id": "T13", "name": "Admin Web UI", "agent": "frontend-developer", "dependencies": ["T10", "T11", "T12"], "complexity": "M", "parallel": true, "tdd_plan": { "test_file": "packages/web-admin/src/__tests__/pages.test.tsx", "test_command": "pnpm --filter @apiex/web-admin test" } },
+                { "id": "T14", "name": "CLI", "agent": "backend-developer", "dependencies": ["T10", "T11"], "complexity": "M", "parallel": true, "tdd_plan": { "test_file": "packages/cli/src/__tests__/commands.test.ts", "test_command": "pnpm --filter @apiex/cli test" } },
+                { "id": "T15", "name": "MCP Server", "agent": "backend-developer", "dependencies": ["T09"], "complexity": "M", "parallel": true, "tdd_plan": { "test_file": "packages/mcp-server/src/__tests__/tools.test.ts", "test_command": "pnpm --filter @apiex/mcp-server test" } },
+                { "id": "T16", "name": "Tool Schema JSON", "agent": "backend-developer", "dependencies": ["T09"], "complexity": "S", "parallel": true, "tdd_plan": null },
+                { "id": "T17", "name": "SKILL.md", "agent": "backend-developer", "dependencies": ["T09"], "complexity": "S", "parallel": true, "tdd_plan": null }
+              ]
+            },
+            {
+              "wave": 6,
+              "name": "收尾",
+              "tasks": [
+                { "id": "T18", "name": "Integration Tests", "agent": "backend-developer", "dependencies": ["T09", "T13", "T14", "T15"], "complexity": "L", "parallel": true, "tdd_plan": { "test_file": "packages/api-server/src/__tests__/integration.test.ts", "test_command": "pnpm --filter @apiex/api-server test:integration" } },
+                { "id": "T19", "name": "部署設定", "agent": "backend-developer", "dependencies": ["T09", "T13"], "complexity": "M", "parallel": true, "tdd_plan": null }
+              ]
+            }
+          ],
+          "total_tasks": 19,
+          "estimated_waves": 6,
+          "verification": {
+            "static_analysis": ["pnpm lint"],
+            "unit_tests": ["pnpm test"],
+            "integration_tests": ["pnpm --filter @apiex/api-server test:integration"]
+          },
+          "verification_round": {
+            "tdd_check": { "status": "pass", "critical": 0, "warnings": 5, "warning_tasks": ["T04", "T09", "T10", "T15", "T18"] },
+            "dod_coverage": { "status": "pass", "critical": 0, "warnings": 4, "warning_acs": ["AC-3", "AC-5", "AC-7", "AC-14"], "coverage_ratio": "12/16" },
+            "path_reference": { "status": "skipped", "reason": "agent lost due to context compaction — 降級處理" }
+          },
+          "supporting_agents": ["codebase-explorer (TDD)", "codebase-explorer (DoD)"],
+          "unverified_dimensions": ["path_reference"]
+        }
+      },
+      "s4": { "status": "in_progress", "output": {}, "started_at": "2026-03-14T22:45:00+08:00" },
+      "s5": { "status": "pending", "output": {} },
+      "s6": { "status": "pending", "output": {} },
+      "s7": { "status": "pending", "output": {} }
+    }
+  }
+}

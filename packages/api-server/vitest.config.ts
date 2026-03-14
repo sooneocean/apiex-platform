@@ -6,5 +6,8 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/__tests__/**/*.test.ts'],
     exclude: ['**/integration.test.ts'],
+    env: {
+      NODE_ENV: 'test',
+    },
   },
 })

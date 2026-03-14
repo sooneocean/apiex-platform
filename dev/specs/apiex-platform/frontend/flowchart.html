@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Apiex Platform — Flowchart</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <style>
+    :root {
+      --color-bg: #ffffff;
+      --color-text: #1e293b;
+      --color-border: #e2e8f0;
+      --color-section-bg: #f8fafc;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--color-bg);
+      color: var(--color-text);
+      padding: 40px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    h1 { font-size: 24px; margin-bottom: 8px; }
+    .meta { color: #64748b; font-size: 14px; margin-bottom: 32px; }
+    .legend {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 32px;
+      padding: 16px;
+      background: #f1f5f9;
+      border-radius: 8px;
+      font-size: 13px;
+    }
+    .legend-item { display: flex; align-items: center; gap: 6px; }
+    .legend-dot {
+      width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid;
+    }
+    .chart-section {
+      background: var(--color-section-bg);
+      border: 1px solid var(--color-border);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+    .chart-section h2 {
+      font-size: 18px;
+      margin-bottom: 4px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--color-border);
+    }
+    .chart-section .section-desc {
+      font-size: 13px;
+      color: #64748b;
+      margin-bottom: 16px;
+      padding-top: 4px;
+    }
+    .mermaid { text-align: center; overflow-x: auto; }
+    @media print {
+      .chart-section { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <h1>Apiex Platform — 流程圖</h1>
+  <p class="meta">Generated from S0 Brief Spec §4 | 2026-03-14 | MVP: FA-A + FA-C</p>
+
+  <div class="legend">
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#e3f2fd;border-color:#1565c0;"></div>
+      <span>前端（控制台 UI）</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#e8f5e9;border-color:#2e7d32;"></div>
+      <span>後端（API / 服務）</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#fff3e0;border-color:#e65100;"></div>
+      <span>第三方服務</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#f3e5f5;border-color:#6a1b9a;"></div>
+      <span>資料儲存（Supabase）</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#ffebee;border-color:#c62828;"></div>
+      <span>例外 / 錯誤</span>
+    </div>
+  </div>
+
+  <!-- §4.0 跨功能區依賴 -->
+  <div class="chart-section">
+    <h2>§4.0 功能區依賴關係</h2>
+    <p class="section-desc">FA-A 與 FA-C 的資料流向與依賴關係</p>
+    <div class="mermaid">
+graph LR
+    FA_A[FA-A: 帳號與 API Key 管理] -->|驗證 API Key + 查詢額度| FA_C[FA-C: API 代理與動態路由]
+    FA_C -->|寫入 token 使用記錄| FA_A
+    </div>
+  </div>
+
+  <!-- §4.1 系統架構總覽 -->
+  <div class="chart-section">
+    <h2>§4.1 系統架構總覽</h2>
+    <p class="section-desc">Agent 介面層（MCP/CLI/Schema/SKILL）→ 後端 → 上游 LLM 的完整架構</p>
+    <div class="mermaid">
+graph TB
+    subgraph AI["🤖 Agent 介面層（FA-T）"]
+        direction LR
+        MCP["MCP Server<br/>npx @apiex/mcp"]:::fe
+        CLI["CLI<br/>apiex login/keys/chat"]:::fe
+        ToolSchema["OpenAI Tool Schema<br/>tool-schema.json"]:::fe
+        SkillMD["SKILL.md<br/>.agents/skills/apiex/"]:::fe
+    end
+
+    subgraph AdminUI["🟦 Admin Web UI（FA-A）"]
+        direction LR
+        AdminLogin[Admin 登入頁]:::fe
+        AdminDash[配額管理頁]:::fe
+        AdminLogs[Usage Logs 查看頁]:::fe
+    end
+
+    subgraph BE["🟩 後端"]
+        direction LR
+        APIProxy["/v1/* Proxy API<br/>（OpenAI 相容）"]:::be
+        KeyService[API Key 驗證服務]:::be
+        RouterService[動態路由服務]:::be
+        UsageLogger[Token 用量記錄器]:::be
+        AuthAPI["Auth API<br/>/auth/login /keys/*"]:::be
+    end
+
+    subgraph TP["🟧 第三方服務"]
+        direction LR
+        Supabase[Supabase Auth + DB]:::tp
+        LLM_Smart["apex-smart<br/>Anthropic API → claude-opus-4-6"]:::tp
+        LLM_Cheap["apex-cheap<br/>Google AI API → gemini-2.0-flash"]:::tp
+    end
+
+    subgraph DB["🟪 資料儲存（Supabase）"]
+        direction LR
+        TblUsers[("users")]:::db
+        TblKeys[("api_keys")]:::db
+        TblUsage[("usage_logs")]:::db
+        TblRoutes[("route_config")]:::db
+    end
+
+    MCP -->|呼叫工具 chat/models| APIProxy
+    CLI -->|apiex login OAuth| AuthAPI
+    CLI -->|apiex keys CRUD| AuthAPI
+    CLI -->|apiex chat| APIProxy
+    ToolSchema -.->|Agent 載入 schema| APIProxy
+    SkillMD -.->|Claude Code 調用| APIProxy
+
+    AdminLogin -->|OAuth| Supabase
+    AdminDash -->|管理配額| AuthAPI
+    AdminLogs -->|查詢 usage| AuthAPI
+
+    AuthAPI --> Supabase
+    AuthAPI --> TblKeys
+    AuthAPI --> TblUsers
+    APIProxy --> KeyService
+    KeyService --> TblKeys
+    APIProxy --> RouterService
+    RouterService --> TblRoutes
+    RouterService -->|apex-smart| LLM_Smart
+    RouterService -->|apex-cheap| LLM_Cheap
+    RouterService --> UsageLogger
+    UsageLogger --> TblUsage
+
+    classDef fe fill:#e3f2fd,color:#1565c0,stroke:#1565c0,stroke-width:2px
+    classDef be fill:#e8f5e9,color:#2e7d32,stroke:#2e7d32,stroke-width:2px
+    classDef tp fill:#fff3e0,color:#e65100,stroke:#e65100,stroke-width:2px
+    classDef db fill:#f3e5f5,color:#6a1b9a,stroke:#6a1b9a,stroke-width:2px
+    classDef ex fill:#ffebee,color:#c62828,stroke:#c62828,stroke-width:2px
+    </div>
+  </div>
+
+  <!-- §4.4 FA-T Agent 接入流程圖 -->
+  <div class="chart-section">
+    <h2>§4.4 FA-T：Agent 接入流程（四種方式）</h2>
+    <p class="section-desc">MCP Server / SKILL.md / Tool Schema / CLI 四種接入路徑匯聚至同一 Proxy API</p>
+    <div class="mermaid">
+flowchart TD
+    Agent[AI Agent / Claude Code / OpenClaw]:::fe
+
+    Agent -->|方式 1：MCP| MCPConfig["讀取 .mcp.json<br/>{ servers: { apiex: { command: npx @apiex/mcp } } }"]:::fe
+    Agent -->|方式 2：SKILL.md| SkillLoad["讀取 .agents/skills/apiex/SKILL.md<br/>觸發關鍵字：apex-smart / apex-cheap"]:::fe
+    Agent -->|方式 3：Tool Schema| ToolLoad["載入 tool-schema.json<br/>inject function definitions"]:::fe
+    Agent -->|方式 4：CLI subprocess| CLICall["執行 apiex chat --model apex-smart --json"]:::fe
+
+    MCPConfig --> MCPServer["MCP Server Process<br/>（Node.js）"]:::be
+    SkillLoad --> DirectAPI["POST /v1/chat/completions<br/>Bearer apx-xxx"]:::be
+    ToolLoad --> DirectAPI
+    CLICall --> DirectAPI
+
+    MCPServer --> DirectAPI
+    DirectAPI --> KeyCheck{驗證 API Key}:::be
+    KeyCheck -->|有效| Proxy["動態路由 → 上游 LLM"]:::tp
+    KeyCheck -->|無效| Err401[401 Unauthorized]:::ex
+    Proxy -->|OpenAI 相容回應| Agent
+
+    classDef fe fill:#e3f2fd,color:#1565c0,stroke:#1565c0,stroke-width:2px
+    classDef be fill:#e8f5e9,color:#2e7d32,stroke:#2e7d32,stroke-width:2px
+    classDef tp fill:#fff3e0,color:#e65100,stroke:#e65100,stroke-width:2px
+    classDef ex fill:#ffebee,color:#c62828,stroke:#c62828,stroke-width:2px
+    </div>
+  </div>
+
+  <!-- §4.2.1 FA-A 全局流程圖（CLI + Admin Web） -->
+  <div class="chart-section">
+    <h2>§4.2.1 FA-A：帳號與 API Key 管理 — 全局流程</h2>
+    <p class="section-desc">左：CLI/Agent 取得 Key 流程；右：人類管理員透過 Admin Web UI 管理配額</p>
+    <div class="mermaid">
+flowchart TD
+    subgraph CLIFlow["CLI / Agent 接入"]
+        CLIStart([執行 apiex login]):::fe
+        CLIStart --> OAuthBrowser[開啟瀏覽器 OAuth 頁]:::fe
+        OAuthBrowser -->|授權成功| StoreConfig["存入 ~/.apiex/config.json<br/>{ api_key: apx-xxx }"]:::fe
+        StoreConfig --> CLIDone([取得 API Key，可直接呼叫]):::fe
+
+        CLIDone --> KeyCreate["apiex keys create --name 'my-agent'"]:::fe
+        KeyCreate --> CreateAPI[POST /keys]:::be
+        CreateAPI -->|成功| ShowKey["一次性顯示明文 Key<br/>（--json 友好格式）"]:::fe
+        CreateAPI -->|額度耗盡| ErrQuota["Error: quota exhausted<br/>contact admin"]:::ex
+
+        CLIDone --> KeyRevoke["apiex keys revoke <key-id>"]:::fe
+        KeyRevoke --> RevokeAPI[DELETE /keys/:id]:::be
+        RevokeAPI --> Done([Key 立即失效])
+    end
+
+    subgraph AdminFlow["Admin Web UI（人類管理員）"]
+        AdminStart([訪問 /admin]):::fe
+        AdminStart --> AdminAuth{已登入?}:::be
+        AdminAuth -->|否| AdminLogin[Admin 登入頁<br/>Supabase OAuth]:::fe
+        AdminAuth -->|是| AdminDash[配額管理頁]:::fe
+        AdminLogin -->|成功| AdminDash
+        AdminDash -->|設定用戶配額| UpdateQuota[PATCH /admin/users/:id/quota]:::be
+        AdminDash --> AdminLogs[Usage Logs 查看頁]:::fe
+    end
+
+    classDef fe fill:#e3f2fd,color:#1565c0,stroke:#1565c0,stroke-width:2px
+    classDef be fill:#e8f5e9,color:#2e7d32,stroke:#2e7d32,stroke-width:2px
+    classDef tp fill:#fff3e0,color:#e65100,stroke:#e65100,stroke-width:2px
+    classDef ex fill:#ffebee,color:#c62828,stroke:#c62828,stroke-width:2px
+    </div>
+  </div>
+
+  <!-- §4.2.2 API Key 建立子流程 -->
+  <div class="chart-section">
+    <h2>§4.2.2 FA-A：API Key 建立子流程</h2>
+    <p class="section-desc">從點擊「建立新 API Key」到一次性顯示明文 Key 的詳細步驟</p>
+    <div class="mermaid">
+flowchart TD
+    Trigger[用戶點擊「建立新 API Key」]:::fe
+    Trigger --> ValidateSession[驗證 Supabase Session]:::be
+    ValidateSession -->|Session 有效| CheckQuota[查詢用戶額度]:::be
+    ValidateSession -->|Session 無效| ErrSession[重導向至登入頁]:::ex
+
+    CheckQuota -->|額度 > 0 或未限制| GenerateKey[crypto 產生 Key<br/>sha256 hash 後存 DB]:::be
+    CheckQuota -->|額度已耗盡| ErrNoQuota[回傳 403 + 提示訊息]:::ex
+
+    GenerateKey --> ReturnPlaintext[回傳明文 Key（一次性）]:::fe
+    ReturnPlaintext --> MaskDisplay[UI 顯示完整 Key + 複製按鈕<br/>提示「此 Key 不會再次顯示」]:::fe
+
+    classDef fe fill:#e3f2fd,color:#1565c0,stroke:#1565c0,stroke-width:2px
+    classDef be fill:#e8f5e9,color:#2e7d32,stroke:#2e7d32,stroke-width:2px
+    classDef ex fill:#ffebee,color:#c62828,stroke:#c62828,stroke-width:2px
+    </div>
+  </div>
+
+  <!-- §4.3.1 FA-C 全局流程圖 -->
+  <div class="chart-section">
+    <h2>§4.3.1 FA-C：API 代理與動態路由 — 全局流程</h2>
+    <p class="section-desc">開發者呼叫 Apiex endpoint 後，驗證、路由、回傳的完整鏈路</p>
+    <div class="mermaid">
+flowchart TD
+    DevCall[開發者呼叫 POST /v1/chat/completions<br/>Header: Authorization Bearer apx-xxx<br/>Body: model=apex-smart 或 apex-cheap]:::fe
+
+    DevCall --> ValidateKey{驗證 API Key}:::be
+    ValidateKey -->|Key 無效/已撤銷| Err401[回傳 401 Unauthorized]:::ex
+    ValidateKey -->|Key 有效| CheckQuota{檢查額度}:::be
+
+    CheckQuota -->|額度耗盡| Err402[回傳 402 Payment Required<br/>提示聯繫管理員]:::ex
+    CheckQuota -->|額度足夠| Routing{路由解析}:::be
+
+    Routing -->|model=apex-smart| SmartModel["路由到 apex-smart<br/>Anthropic API → claude-opus-4-6"]:::tp
+    Routing -->|model=apex-cheap| CheapModel["路由到 apex-cheap<br/>Google AI API → gemini-2.0-flash"]:::tp
+    Routing -->|model=不支援| Err400[回傳 400 Bad Request<br/>列出支援的 model 標籤]:::ex
+
+    SmartModel -->|成功| StreamResponse[Streaming / 一次性回傳結果]:::fe
+    CheapModel -->|成功| StreamResponse
+    SmartModel -->|上游失敗| ErrUpstream[回傳 502 Bad Gateway]:::ex
+    CheapModel -->|上游失敗| ErrUpstream
+
+    StreamResponse --> LogUsage[記錄 token 用量 + 延遲到 usage_logs]:::be
+    LogUsage --> Done([完成])
+
+    classDef fe fill:#e3f2fd,color:#1565c0,stroke:#1565c0,stroke-width:2px
+    classDef be fill:#e8f5e9,color:#2e7d32,stroke:#2e7d32,stroke-width:2px
+    classDef tp fill:#fff3e0,color:#e65100,stroke:#e65100,stroke-width:2px
+    classDef ex fill:#ffebee,color:#c62828,stroke:#c62828,stroke-width:2px
+    </div>
+  </div>
+
+  <!-- §4.3.2 路由解析子流程 -->
+  <div class="chart-section">
+    <h2>§4.3.2 FA-C：路由解析子流程</h2>
+    <p class="section-desc">根據 model 欄位判斷路由目標，並組裝上游請求</p>
+    <div class="mermaid">
+flowchart TD
+    Input[接收請求 model 欄位]:::be
+    Input --> IsApex{是 apex-* 標籤?}:::be
+
+    IsApex -->|apex-smart| QuerySmart[查詢 route_config<br/>WHERE tag = apex-smart AND active = true]:::be
+    IsApex -->|apex-cheap| QueryCheap[查詢 route_config<br/>WHERE tag = apex-cheap AND active = true]:::be
+    IsApex -->|其他標準 model ID| PassThru[直接使用指定 model ID<br/>路由到對應上游]:::be
+    IsApex -->|未知| Err400[回傳 400]:::ex
+
+    QuerySmart -->|找到設定| BuildReq[組裝上游請求<br/>替換 model + Authorization]:::be
+    QueryCheap -->|找到設定| BuildReq
+    QuerySmart -->|找不到設定| ErrMisconfig[回傳 503 + 內部告警]:::ex
+    PassThru --> BuildReq
+
+    BuildReq --> Forward[轉發到上游 LLM]:::tp
+
+    classDef fe fill:#e3f2fd,color:#1565c0,stroke:#1565c0,stroke-width:2px
+    classDef be fill:#e8f5e9,color:#2e7d32,stroke:#2e7d32,stroke-width:2px
+    classDef tp fill:#fff3e0,color:#e65100,stroke:#e65100,stroke-width:2px
+    classDef ex fill:#ffebee,color:#c62828,stroke:#c62828,stroke-width:2px
+    </div>
+  </div>
+
+  <!-- §4.4 例外流程圖（跨 FA） -->
+  <div class="chart-section">
+    <h2>§4.4 例外流程圖（跨 FA）</h2>
+    <p class="section-desc">所有 API 請求可能觸發的例外情境與對應處理方式</p>
+    <div class="mermaid">
+flowchart TD
+    Any[任意 API 請求]:::fe --> Gate{通過哪關失敗?}
+
+    Gate -->|API Key 無效/撤銷| E_Auth[401 Unauthorized<br/>message: Invalid API Key]:::ex
+    Gate -->|額度耗盡| E_Quota[402 Payment Required<br/>message: Quota exhausted, contact admin]:::ex
+    Gate -->|不支援的 model| E_Model[400 Bad Request<br/>message: Unsupported model, valid: apex-smart / apex-cheap]:::ex
+    Gate -->|上游 LLM 超時| E_Timeout[502 Bad Gateway<br/>message: Upstream timeout after 30s]:::ex
+    Gate -->|上游 LLM 內容拒絕| E_Content[透傳上游錯誤碼與 message]:::ex
+    Gate -->|上游回傳非預期格式| E_Parse[502 Bad Gateway<br/>內部告警，記錄原始回應]:::ex
+    Gate -->|路由設定缺失| E_Config[503 Service Unavailable<br/>內部告警]:::ex
+    Gate -->|Streaming 中途斷連| E_Stream[SSE 發送 error event<br/>已用 token 仍記錄]:::ex
+
+    E_Auth --> Recover[開發者修正後重試]:::fe
+    E_Quota --> Recover
+    E_Model --> Recover
+    E_Timeout --> Retry{可重試?}:::be
+    Retry -->|是| RetryOnce[重試一次換備援路由]:::be
+    Retry -->|否| Recover
+    RetryOnce -->|成功| Continue[繼續正常流程]:::fe
+    RetryOnce -->|失敗| Recover
+
+    classDef fe fill:#e3f2fd,color:#1565c0,stroke:#1565c0,stroke-width:2px
+    classDef be fill:#e8f5e9,color:#2e7d32,stroke:#2e7d32,stroke-width:2px
+    classDef ex fill:#ffebee,color:#c62828,stroke:#c62828,stroke-width:2px
+    </div>
+  </div>
+
+  <!-- Screen ID Map (for wireframe skill) -->
+  <script type="application/json" id="screen-id-map">
+  {
+    "screens": [
+      { "id": "S1", "mermaid_node": "AdminLogin", "label": "Admin 登入頁（Supabase OAuth）" },
+      { "id": "S2", "mermaid_node": "AdminDash", "label": "Admin 配額管理頁" },
+      { "id": "S3", "mermaid_node": "AdminLogs", "label": "Admin Usage Logs 查看頁" }
+    ],
+    "cli_commands": [
+      { "id": "C1", "command": "apiex login", "label": "OAuth 登入取得 Key" },
+      { "id": "C2", "command": "apiex keys create", "label": "建立 API Key" },
+      { "id": "C3", "command": "apiex keys list", "label": "列出 API Key" },
+      { "id": "C4", "command": "apiex keys revoke", "label": "撤銷 API Key" },
+      { "id": "C5", "command": "apiex chat", "label": "直接呼叫 LLM" },
+      { "id": "C6", "command": "apiex status", "label": "查詢配額與路由狀態" }
+    ],
+    "mcp_tools": [
+      { "id": "T1", "tool": "apiex_chat", "label": "呼叫 apex-smart / apex-cheap" },
+      { "id": "T2", "tool": "apiex_models", "label": "列出可用模型標籤" },
+      { "id": "T3", "tool": "apiex_usage", "label": "查詢用量摘要" }
+    ]
+  }
+  </script>
+
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'base',
+      themeVariables: {
+        primaryColor: '#e3f2fd',
+        primaryTextColor: '#1565c0',
+        primaryBorderColor: '#1565c0',
+        lineColor: '#94a3b8',
+        secondaryColor: '#e8f5e9',
+        tertiaryColor: '#fff3e0'
+      }
+    });
+  </script>
+</body>
+</html>
