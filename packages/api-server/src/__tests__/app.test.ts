@@ -1,17 +1,32 @@
 /**
  * T03 TDD — Hono App 骨架測試
- * RED: 此時 app.ts 尚未實作，測試預期全部失敗
+ * Tests: health check, 404 handler, apiKeyAuth, adminAuth
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// Mock Supabase before importing app
+// Mock Supabase modules before importing app
 vi.mock('../lib/supabase.js', () => ({
   supabaseAdmin: {
-    from: vi.fn(),
+    from: vi.fn().mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            single: vi.fn().mockResolvedValue({ data: null, error: { message: 'not found' } }),
+          }),
+        }),
+      }),
+    }),
   },
 }))
 
-// Import app after mocks are set up
+vi.mock('@supabase/supabase-js', () => ({
+  createClient: vi.fn(() => ({
+    auth: {
+      getUser: vi.fn().mockResolvedValue({ data: { user: null }, error: { message: 'invalid' } }),
+    },
+  })),
+}))
+
 const { createApp } = await import('../index.js')
 
 describe('Hono App — 骨架測試', () => {
@@ -35,8 +50,8 @@ describe('Hono App — 骨架測試', () => {
     const body = await res.json()
     expect(body).toMatchObject({
       error: {
-        type: expect.any(String),
-        code: expect.any(String),
+        type: 'invalid_request_error',
+        code: 'not_found',
       },
     })
   })
