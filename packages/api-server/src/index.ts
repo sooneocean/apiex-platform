@@ -3,6 +3,7 @@ import { cors } from 'hono/cors'
 import { serve } from '@hono/node-server'
 import { ApiError, Errors } from './lib/errors.js'
 import { apiKeyAuth } from './middleware/apiKeyAuth.js'
+import { rateLimitMiddleware } from './middleware/rateLimitMiddleware.js'
 import { supabaseJwtAuth, adminAuth } from './middleware/adminAuth.js'
 import { proxyRoutes } from './routes/proxy.js'
 import { authRoutes } from './routes/auth.js'
@@ -32,6 +33,7 @@ export function createApp() {
   // Proxy routes (API Key auth)
   const v1 = new Hono()
   v1.use('*', apiKeyAuth)
+  v1.use('*', rateLimitMiddleware)
   v1.route('/', proxyRoutes())
   app.route('/v1', v1)
 

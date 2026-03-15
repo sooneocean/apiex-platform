@@ -6,6 +6,7 @@ import { UsageLogger, type UsageLogEntry } from '../services/UsageLogger.js'
 import { InsufficientQuotaError, Errors } from '../lib/errors.js'
 import type { OpenAIRequest } from '../adapters/types.js'
 import { supabaseAdmin } from '../lib/supabase.js'
+import { rateLimiter } from '../lib/RateLimiter.js'
 
 /**
  * Supported model tags (OpenAI-compat aliases).
@@ -74,6 +75,7 @@ export function proxyRoutes() {
 
         // Fire-and-forget: settle quota + log usage
         keyService.settleQuota(apiKeyId, estimatedTokens, usage.total_tokens).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
+        rateLimiter.record(apiKeyId, usage.total_tokens)
         const logEntry: UsageLogEntry = {
           apiKeyId,
           modelTag: route.tag,
@@ -111,6 +113,7 @@ export function proxyRoutes() {
           const usage = result.usage
 
           keyService.settleQuota(apiKeyId, estimatedTokens, usage.total_tokens).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
+          rateLimiter.record(apiKeyId, usage.total_tokens)
           const logEntry: UsageLogEntry = {
             apiKeyId,
             modelTag: route.tag,
