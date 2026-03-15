@@ -136,6 +136,12 @@ export const Errors = {
   invalidPlan: () =>
     makeError('Invalid plan. Valid values: plan_5, plan_10, plan_20.', 'invalid_request_error', 'invalid_plan', 400),
 
+  invalidParam: (message: string) =>
+    makeError(message, 'invalid_request_error', 'invalid_parameter', 400),
+
+  gatewayTimeout: () =>
+    makeError('Aggregation query timed out. Please try a shorter time range.', 'server_error', 'gateway_timeout', 504),
+
   stripeError: (detail?: string) =>
     makeError(detail ?? 'Stripe service error.', 'server_error', 'stripe_error', 500),
 

@@ -10,6 +10,7 @@ import { authRoutes } from './routes/auth.js'
 import { keysRoutes } from './routes/keys.js'
 import { adminRoutes } from './routes/admin.js'
 import { topupRoutes, topupWebhookRoute } from './routes/topup.js'
+import { analyticsRoutes } from './routes/analytics.js'
 
 export function createApp() {
   const app = new Hono()
@@ -59,6 +60,12 @@ export function createApp() {
   topup.use('*', supabaseJwtAuth)
   topup.route('/', topupRoutes())
   app.route('/topup', topup)
+
+  // Analytics routes (Supabase JWT auth)
+  const analytics = new Hono()
+  analytics.use('*', supabaseJwtAuth)
+  analytics.route('/', analyticsRoutes())
+  app.route('/analytics', analytics)
 
   // Admin routes (Admin JWT auth)
   const admin = new Hono()
