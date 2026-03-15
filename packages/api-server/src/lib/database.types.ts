@@ -24,6 +24,8 @@ export interface ApiKey {
   name: string;
   status: ApiKeyStatus;
   quota_tokens: number;
+  spend_limit_usd: number;
+  spent_usd: number;
   created_at: string;
   revoked_at: string | null;
 }
@@ -70,6 +72,8 @@ export interface ApiKeyInsert {
   name?: string;
   status?: ApiKeyStatus;
   quota_tokens?: number;
+  spend_limit_usd?: number;
+  spent_usd?: number;
   created_at?: string;
   revoked_at?: string | null;
 }

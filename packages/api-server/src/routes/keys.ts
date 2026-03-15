@@ -2,6 +2,11 @@ import { Hono } from 'hono'
 import { KeyService } from '../services/KeyService.js'
 import { Errors } from '../lib/errors.js'
 
+/** spend_limit_usd 有效值：-1（無限）或 >= 0 的整數 */
+function isValidSpendLimit(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= -1
+}
+
 /**
  * In-memory rate limiter for POST /keys.
  * Tracks last creation timestamp per userId.
@@ -49,10 +54,16 @@ export function keysRoutes() {
       return Errors.rateLimitExceeded()
     }
 
-    const body = await c.req.json<{ name?: string }>().catch(() => ({}))
+    const body = await c.req.json<{ name?: string; spend_limit_usd?: number }>().catch(() => ({}))
     const name = body.name ?? ''
 
-    const result = await keyService.createKey(userId, name)
+    // Validate spend_limit_usd if provided
+    if (body.spend_limit_usd !== undefined && !isValidSpendLimit(body.spend_limit_usd)) {
+      return Errors.invalidParam('spend_limit_usd must be an integer >= -1 (-1 means unlimited).')
+    }
+
+    const spendLimitUsd = body.spend_limit_usd ?? -1
+    const result = await keyService.createKey(userId, name, spendLimitUsd)
 
     // Record timestamp for rate limiting
     createKeyTimestamps.set(userId, Date.now())
@@ -66,12 +77,40 @@ export function keysRoutes() {
           name: result.name,
           status: result.status,
           quota_tokens: result.quota_tokens,
+          spend_limit_usd: result.spend_limit_usd,
+          spent_usd: result.spent_usd,
           created_at: result.created_at,
         },
         warning: 'This key will not be shown again. Store it securely.',
       },
       201
     )
+  })
+
+  /**
+   * PATCH /keys/:id/spend-limit — Update the spend limit for an API key
+   */
+  router.patch('/:id/spend-limit', async (c) => {
+    const userId = c.get('userId') as string
+    const keyId = c.req.param('id')
+
+    const body = await c.req.json<{ spend_limit_usd?: number }>().catch(() => ({}))
+
+    if (body.spend_limit_usd === undefined || !isValidSpendLimit(body.spend_limit_usd)) {
+      return Errors.invalidParam('spend_limit_usd must be an integer >= -1 (-1 means unlimited).')
+    }
+
+    try {
+      await keyService.updateSpendLimit(userId, keyId, body.spend_limit_usd)
+      return c.json({
+        data: {
+          id: keyId,
+          spend_limit_usd: body.spend_limit_usd,
+        },
+      })
+    } catch {
+      return Errors.notFound()
+    }
   })
 
   /**

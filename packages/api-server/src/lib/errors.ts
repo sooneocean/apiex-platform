@@ -150,4 +150,7 @@ export const Errors = {
 
   missingSessionId: () =>
     makeError('Missing session_id parameter.', 'invalid_request_error', 'missing_session_id', 400),
+
+  spendLimitExceeded: () =>
+    makeError('Spend limit reached. Please contact your admin to increase or reset your spend limit.', 'insufficient_quota', 'spend_limit_exceeded', 402),
 }

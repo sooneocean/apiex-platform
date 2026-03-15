@@ -1,0 +1,219 @@
+{
+  "sdd_context": {
+    "version": "3.0.0",
+    "feature": "per-key-spend-limit",
+    "current_stage": "S7",
+    "spec_mode": "full",
+    "spec_mode_reason": "跨 DB/後端/前端的完整功能，需要 API 契約 + 任務拆解",
+    "work_type": "new_feature",
+    "spec_folder": "dev/specs/spend-limit",
+    "execution_mode": "autopilot",
+    "status": "completed",
+    "started_at": "2026-03-15T10:00:00+08:00",
+    "last_updated": "2026-03-15T14:30:00+08:00",
+    "last_updated_by": "claude-sonnet-4-6",
+    "stages": {
+      "s0": {
+        "status": "completed",
+        "agent": "requirement-analyst",
+        "started_at": "2026-03-15T10:00:00+08:00",
+        "completed_at": "2026-03-15T10:00:00+08:00",
+        "output": {
+          "brief_spec_path": "dev/specs/spend-limit/s0_brief_spec.md",
+          "work_type": "new_feature",
+          "requirement": "Per-key spend limit: 讓用戶為每個 API Key 設定花費上限（USD cents），超限時拒絕請求",
+          "pain_points": [
+            "無花費控制，quota 只管 token 數量",
+            "單一 key 失控風險"
+          ],
+          "goal": "用戶/Admin 可設定 per-key 花費上限，Proxy 自動檢查並記錄花費",
+          "success_criteria": [
+            "SC-1: POST /keys 支援 spend_limit_usd",
+            "SC-2: PATCH /keys/:id 可修改 spend_limit_usd",
+            "SC-3: GET /keys 回傳 spend_limit_usd + spent_usd",
+            "SC-4: 超限時回傳 402 spend_limit_exceeded",
+            "SC-5: 請求完成後正確累加 spent_usd",
+            "SC-6: Admin 可重置 spent_usd",
+            "SC-7: Portal UI 顯示花費狀態"
+          ],
+          "scope_in": [
+            "DB 欄位",
+            "Proxy check+record",
+            "Keys route",
+            "Admin route",
+            "Portal UI"
+          ],
+          "scope_out": [
+            "花費預扣",
+            "花費通知",
+            "月重置",
+            "精確成本追蹤"
+          ],
+          "constraints": [
+            "依賴 model_rates 表",
+            "允許輕微超額",
+            "美分 INTEGER"
+          ],
+          "functional_areas": [
+            {
+              "id": "FA-A",
+              "name": "Spend Limit 設定",
+              "independence": "high"
+            },
+            {
+              "id": "FA-B",
+              "name": "Spend Check & Record",
+              "independence": "medium"
+            }
+          ],
+          "decomposition_strategy": "single_sop"
+        }
+      },
+      "s1": {
+        "status": "completed",
+        "agents": [
+          "codebase-explorer",
+          "architect"
+        ],
+        "started_at": "2026-03-15T10:00:00+08:00",
+        "completed_at": "2026-03-15T10:00:00+08:00",
+        "output": {
+          "completed_phases": [1, 2],
+          "dev_spec_path": "dev/specs/spend-limit/s1_dev_spec.md",
+          "api_spec_path": "dev/specs/spend-limit/s1_api_spec.md",
+          "impact_scope": {
+            "backend": [
+              "packages/api-server/src/services/KeyService.ts（修改）",
+              "packages/api-server/src/routes/proxy.ts（修改）",
+              "packages/api-server/src/routes/keys.ts（修改）",
+              "packages/api-server/src/routes/admin.ts（修改）",
+              "packages/api-server/src/lib/errors.ts（修改）"
+            ],
+            "database": [
+              "api_keys（ALTER TABLE + 2 SQL functions）"
+            ],
+            "frontend": [
+              "packages/web-admin/src/lib/api.ts（修改）",
+              "packages/web-admin/src/components/ApiKeyCard.tsx（修改）",
+              "packages/web-admin/src/components/ApiKeyCreateModal.tsx（修改）"
+            ]
+          },
+          "tasks": ["T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8"],
+          "acceptance_criteria": [
+            "AC-1: 建立 key 設定花費上限",
+            "AC-2: 花費超限被拒 402",
+            "AC-3: 正常請求累加花費",
+            "AC-4: 無限制 key 不受影響",
+            "AC-5: Admin 重置花費",
+            "AC-6: 修改花費上限",
+            "AC-7: model_rates 未設定 → cost=0",
+            "AC-8: 前端顯示花費"
+          ],
+          "assumptions": [
+            "model_rates 表已有正確費率",
+            "apiKeyAuth select('*') 涵蓋新欄位"
+          ],
+          "solution_summary": "api_keys 新增 spend_limit_usd + spent_usd 欄位，Proxy pre-check（零額外 DB query）+ post-record（fire-and-forget），Keys/Admin route 擴充",
+          "tech_debt": [],
+          "regression_risks": [
+            "Proxy pipeline 新增步驟",
+            "API 回應格式擴充"
+          ]
+        }
+      },
+      "s2": {
+        "status": "skipped",
+        "output": {
+          "reason": "用戶要求直接產出 S0~S3，跳過對抗式審查"
+        }
+      },
+      "s3": {
+        "status": "completed",
+        "agent": "architect",
+        "started_at": "2026-03-15T10:00:00+08:00",
+        "completed_at": "2026-03-15T10:00:00+08:00",
+        "output": {
+          "implementation_plan_path": "dev/specs/spend-limit/s3_implementation_plan.md",
+          "waves": [
+            {
+              "wave": 1,
+              "name": "資料層",
+              "tasks": [
+                {"id": 1, "name": "DB Migration", "agent": "backend-developer", "dependencies": [], "complexity": "S", "parallel": false}
+              ]
+            },
+            {
+              "wave": 2,
+              "name": "後端服務",
+              "tasks": [
+                {"id": 2, "name": "KeyService 擴充", "agent": "backend-developer", "dependencies": [1], "complexity": "M", "parallel": false}
+              ]
+            },
+            {
+              "wave": 3,
+              "name": "後端 API + 前端",
+              "tasks": [
+                {"id": 3, "name": "Proxy Spend Check", "agent": "backend-developer", "dependencies": [2], "complexity": "S", "parallel": true},
+                {"id": 4, "name": "Proxy Spend Record", "agent": "backend-developer", "dependencies": [2], "complexity": "M", "parallel": true},
+                {"id": 5, "name": "Keys Route", "agent": "backend-developer", "dependencies": [2], "complexity": "S", "parallel": true},
+                {"id": 6, "name": "Admin Route", "agent": "backend-developer", "dependencies": [2], "complexity": "M", "parallel": true},
+                {"id": 7, "name": "Frontend UI", "agent": "frontend-developer", "dependencies": [5], "complexity": "M", "parallel": true}
+              ]
+            },
+            {
+              "wave": 4,
+              "name": "測試",
+              "tasks": [
+                {"id": 8, "name": "Tests", "agent": "backend-developer", "dependencies": [3, 4, 5, 6], "complexity": "M", "parallel": false}
+              ]
+            }
+          ],
+          "total_tasks": 8,
+          "estimated_waves": 4,
+          "verification": {
+            "static_analysis": ["pnpm lint"],
+            "unit_tests": ["pnpm --filter @apiex/api-server test"]
+          }
+        }
+      },
+      "s4": {
+        "status": "completed",
+        "started_at": "2026-03-15T14:00:00+08:00",
+        "completed_at": "2026-03-15T14:30:00+08:00",
+        "output": {
+          "completed_tasks": [1, 2, 3, 4, 5],
+          "waves_completed": 4,
+          "artifacts": [
+            "packages/api-server/supabase/migrations/20260315100000_spend_limit.sql",
+            "packages/api-server/src/lib/database.types.ts",
+            "packages/api-server/src/lib/errors.ts",
+            "packages/api-server/src/services/KeyService.ts",
+            "packages/api-server/src/routes/proxy.ts",
+            "packages/api-server/src/routes/keys.ts"
+          ]
+        }
+      },
+      "s5": {
+        "status": "skipped",
+        "output": { "reason": "Autopilot: 無 P0 問題，自動通過" }
+      },
+      "s6": {
+        "status": "completed",
+        "output": {
+          "test_result": "171 tests passed (17 test files)",
+          "new_tests": 25,
+          "coverage": ["KeyService.checkSpendLimit", "KeyService.recordSpend", "proxy spend-limit 402", "keys PATCH spend-limit"]
+        }
+      },
+      "s7": {
+        "status": "completed",
+        "output": {
+          "commits": [
+            "test(red): spend-limit failing tests",
+            "feat(green): per-key spend limit — DB + KeyService + proxy + keys"
+          ]
+        }
+      }
+    }
+  }
+}

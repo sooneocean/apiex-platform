@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { stream as honoStream } from 'hono/streaming'
 import { RouterService } from '../services/RouterService.js'
 import { KeyService } from '../services/KeyService.js'
+import { RatesService } from '../services/RatesService.js'
 import { UsageLogger, type UsageLogEntry } from '../services/UsageLogger.js'
 import { InsufficientQuotaError, Errors } from '../lib/errors.js'
 import type { OpenAIRequest } from '../adapters/types.js'
@@ -21,6 +22,7 @@ export function proxyRoutes() {
   const router = new Hono()
   const routerService = new RouterService()
   const keyService = new KeyService()
+  const ratesService = new RatesService()
   const usageLogger = new UsageLogger()
 
   /**
@@ -54,6 +56,14 @@ export function proxyRoutes() {
       throw new InsufficientQuotaError()
     }
 
+    // Step 3.5 — check spend limit (after quota reserve, before upstream)
+    const withinLimit = await keyService.checkSpendLimit(apiKeyId)
+    if (!withinLimit) {
+      // Refund the reserved quota before rejecting
+      keyService.settleQuota(apiKeyId, estimatedTokens, 0).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
+      return Errors.spendLimitExceeded()
+    }
+
     // Step 5 — resolve route (503 if not configured, with quota refund)
     let route
     try {
@@ -73,7 +83,7 @@ export function proxyRoutes() {
         const latencyMs = Date.now() - startTime
         const usage = result.data.usage
 
-        // Fire-and-forget: settle quota + log usage
+        // Fire-and-forget: settle quota + log usage + record spend
         keyService.settleQuota(apiKeyId, estimatedTokens, usage.total_tokens).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
         rateLimiter.record(apiKeyId, usage.total_tokens)
         const logEntry: UsageLogEntry = {
@@ -87,6 +97,17 @@ export function proxyRoutes() {
           status: 'success',
         }
         usageLogger.logUsage(logEntry).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
+
+        // Record spend (fire-and-forget): query rate and calculate cost in cents
+        ratesService.getEffectiveRate(route.tag, new Date()).then((rate) => {
+          if (rate) {
+            const costCents = Math.round(
+              (usage.prompt_tokens / 1000) * rate.input_rate_per_1k * 100 +
+              (usage.completion_tokens / 1000) * rate.output_rate_per_1k * 100
+            )
+            keyService.recordSpend(apiKeyId, costCents).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
+          }
+        }).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
 
         return c.json(result.data)
       }
@@ -125,6 +146,17 @@ export function proxyRoutes() {
             status: 'success',
           }
           usageLogger.logUsage(logEntry).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
+
+          // Record spend (fire-and-forget): query rate and calculate cost in cents
+          ratesService.getEffectiveRate(route.tag, new Date()).then((rate) => {
+            if (rate) {
+              const costCents = Math.round(
+                (usage.prompt_tokens / 1000) * rate.input_rate_per_1k * 100 +
+                (usage.completion_tokens / 1000) * rate.output_rate_per_1k * 100
+              )
+              keyService.recordSpend(apiKeyId, costCents).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
+            }
+          }).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
         }
       })
     } catch (err) {
