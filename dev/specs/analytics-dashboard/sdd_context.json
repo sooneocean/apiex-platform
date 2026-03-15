@@ -1,0 +1,265 @@
+{
+  "sdd_context": {
+    "version": "2.8.0",
+    "feature": "analytics-dashboard",
+    "current_stage": "S7",
+    "spec_mode": "full",
+    "spec_mode_reason": "涉及前端多頁面（用戶 Dashboard + Admin Dashboard + 費率設定）+ 新後端 API 層 + 新 DB 表（model_rates）+ 圖表庫引入，複雜度中高，需完整 spec 文件",
+    "work_type": "new_feature",
+    "spec_folder": "dev/specs/analytics-dashboard",
+    "execution_mode": "autopilot",
+    "status": "completed",
+    "started_at": "2026-03-15T15:00:00+08:00",
+    "last_updated": "2026-03-15T16:30:00+08:00",
+    "last_updated_by": "architect",
+    "stages": {
+      "s0": {
+        "status": "completed",
+        "agent": "requirement-analyst",
+        "started_at": "2026-03-15T15:00:00+08:00",
+        "completed_at": "2026-03-15T15:30:00+08:00",
+        "output": {
+          "brief_spec_path": "dev/specs/analytics-dashboard/s0_brief_spec.md",
+          "work_type": "new_feature",
+          "requirement": "為 Apiex 平台用戶與 Admin 建立 Analytics Dashboard，整合至現有 Admin UI 並依角色分流，展示 token 用量趨勢（含 per-key 篩選）、按 model 分開的 p50/p95/p99 延遲監控、帳單費用換算（per-model 費率表，Admin 可動態設定）",
+          "pain_points": [
+            "用戶只有靜態累計數字，無法看趨勢、無法知道哪個 key 最活躍",
+            "usage_logs 有延遲資料但完全沒有前端呈現，無法區分 apex-smart vs apex-cheap 延遲差異",
+            "有了 Stripe 儲值後，充值與消耗狀況無法自助查看，也無法換算金額費用",
+            "Admin 缺乏全平台彙總視圖，只能翻原始 log 列表"
+          ],
+          "goal": "用戶能看個人用量趨勢（含 per-key 篩選）/model 分布/延遲（p50/p95/p99）/費用帳單；Admin 能看全平台彙總/延遲健康（按 model 分開）/用戶排行/管理費率表",
+          "success_criteria": [
+            "用戶 Dashboard 顯示 7d token 用量 AreaChart（預設，自動 day 粒度）",
+            "切換 24h/7d/30d 篩選，粒度自動切換（24h→hour，7d/30d→day）",
+            "多 API Key 用戶可透過 key 篩選器分 key 查看用量",
+            "延遲視圖顯示 p50/p95/p99 三條線",
+            "帳單區塊顯示費用換算（USD），費率設定後正確計算；費率未設定時顯示 N/A",
+            "Admin Dashboard 的延遲視圖顯示 apex-smart 和 apex-cheap 各自的 p50/p95/p99（共 6 條線）",
+            "Admin 能在費率設定頁新增/修改費率，修改前的 usage 仍套用舊費率（歷史費率準確）",
+            "Admin 能看到用戶消耗排行 Top 10（含 token 用量和費用金額）",
+            "新用戶（零 usage）顯示空狀態 UI，不報錯",
+            "30d 時序查詢回應時間 < 3 秒",
+            "所有圖表 loading 狀態有骨架畫面（skeleton）",
+            "快速切換篩選時舊請求被取消，不出現資料閃爍"
+          ],
+          "scope_in": [
+            "FA-D4：費率表管理（model_rates 新表 + Admin CRUD API + 費率設定頁）",
+            "FA-D3：後端資料聚合 API（11 個新 endpoints）",
+            "FA-D1：用戶 Analytics Dashboard",
+            "FA-D2：Admin Analytics Dashboard",
+            "DB Index 優化（usage_logs composite index）",
+            "GET /auth/me + middleware role-based 路由"
+          ],
+          "scope_out": [
+            "Realtime 即時資料",
+            "資料匯出（CSV/JSON）",
+            "告警系統",
+            "自訂 Dashboard 佈局",
+            "物化視圖/快取層",
+            "Custom 時間範圍選擇器",
+            "per-request 費用明細",
+            "財務預測/趨勢預測"
+          ],
+          "constraints": [
+            "前端整合至現有 packages/web-admin",
+            "不修改現有表結構",
+            "新增 model_rates 表",
+            "圖表庫：Recharts（Tremor 不支援 Tailwind v4）",
+            "時間粒度全自動",
+            "MVP 即時 SQL 聚合",
+            "最大查詢 30d，timeout 10s"
+          ],
+          "functional_areas": [
+            { "id": "FA-D1", "name": "用戶 Analytics Dashboard", "independence": "medium" },
+            { "id": "FA-D2", "name": "Admin Analytics Dashboard", "independence": "medium" },
+            { "id": "FA-D3", "name": "後端資料聚合 API", "independence": "high" },
+            { "id": "FA-D4", "name": "費率表管理", "independence": "high" }
+          ],
+          "decomposition_strategy": "single_sop_fa_labeled",
+          "confirmed_decisions": {
+            "Q1_frontend_location": "整合至 packages/web-admin，依角色路由",
+            "Q2_billing": "model_rates 費率表 + effective_from 歷史版本",
+            "Q3_granularity": "全自動：24h→hour，7d/30d→day",
+            "Q4_latency_metrics": "p50/p95/p99 按 model 分開",
+            "Q5_per_key": "支援 per-key 篩選"
+          },
+          "db_changes": {
+            "new_tables": ["model_rates"],
+            "modified_tables": [],
+            "new_indexes": [
+              "idx_usage_logs_api_key_created ON usage_logs (api_key_id, created_at DESC)",
+              "idx_model_rates_tag_effective ON model_rates (model_tag, effective_from DESC)"
+            ]
+          }
+        }
+      },
+      "s1": {
+        "status": "completed",
+        "agents": ["codebase-explorer", "architect"],
+        "started_at": "2026-03-15T16:00:00+08:00",
+        "completed_at": "2026-03-15T16:30:00+08:00",
+        "output": {
+          "completed_phases": [1, 2],
+          "dev_spec_path": "dev/specs/analytics-dashboard/s1_dev_spec.md",
+          "api_spec_path": "dev/specs/analytics-dashboard/s1_api_spec.md",
+          "solution_summary": "Hono routes（/analytics/* + /admin/analytics/* + /admin/rates） + AggregationService（即時 SQL DATE_TRUNC + PERCENTILE_CONT） + RatesService（model_rates CRUD） + Recharts 圖表元件 + middleware role-based routing（GET /auth/me + ADMIN_EMAILS）",
+          "tasks": [
+            { "id": 1, "name": "DB migration: model_rates + usage_logs index + types", "type": "db", "agent": "db-expert", "complexity": "S" },
+            { "id": 2, "name": "GET /auth/me endpoint", "type": "backend", "agent": "backend-expert", "complexity": "S" },
+            { "id": 3, "name": "RatesService CRUD", "type": "backend", "agent": "backend-expert", "complexity": "S" },
+            { "id": 4, "name": "AggregationService: timeseries + model-breakdown", "type": "backend", "agent": "backend-expert", "complexity": "M" },
+            { "id": 5, "name": "AggregationService: latency percentile", "type": "backend", "agent": "backend-expert", "complexity": "M" },
+            { "id": 6, "name": "AggregationService: billing + overview + top-users", "type": "backend", "agent": "backend-expert", "complexity": "L" },
+            { "id": 7, "name": "User analytics routes (/analytics/*)", "type": "backend", "agent": "backend-expert", "complexity": "M" },
+            { "id": 8, "name": "Admin analytics + rates routes", "type": "backend", "agent": "backend-expert", "complexity": "M" },
+            { "id": 9, "name": "Install recharts + frontend API layer", "type": "frontend", "agent": "frontend-expert", "complexity": "S" },
+            { "id": 10, "name": "Shared UI components (StatsCard, PeriodSelector, KeySelector, EmptyState, LoadingSkeleton)", "type": "frontend", "agent": "frontend-expert", "complexity": "M" },
+            { "id": 11, "name": "Chart components (TimeseriesAreaChart, LatencyLineChart, DonutChart)", "type": "frontend", "agent": "frontend-expert", "complexity": "M" },
+            { "id": 12, "name": "Middleware role-based routing", "type": "frontend", "agent": "frontend-expert", "complexity": "M" },
+            { "id": 13, "name": "User Dashboard page (/portal/dashboard) + portal layout", "type": "frontend", "agent": "frontend-expert", "complexity": "L" },
+            { "id": 14, "name": "Admin Analytics page + AppLayout", "type": "frontend", "agent": "frontend-expert", "complexity": "L" },
+            { "id": 15, "name": "Admin Rates Settings page", "type": "frontend", "agent": "frontend-expert", "complexity": "M" },
+            { "id": 16, "name": "Integration testing + acceptance", "type": "test", "agent": "test-engineer", "complexity": "M" }
+          ],
+          "acceptance_criteria": [
+            "用戶 7d 用量 AreaChart",
+            "24h/7d/30d 粒度自動",
+            "per-key 篩選",
+            "延遲 p50/p95/p99",
+            "帳單費用 USD / N/A",
+            "Admin 延遲 6 條線",
+            "費率 CRUD + 歷史費率",
+            "Top 10 排行含費用",
+            "新用戶空狀態",
+            "30d < 3s",
+            "Skeleton loading",
+            "快速切換無閃爍",
+            "角色分流",
+            "Admin 全平台概況",
+            "回歸不受影響"
+          ],
+          "assumptions": [
+            "topup_logs migration 存在（004_topup_logs.sql 已驗證）",
+            "ADMIN_EMAILS 機制足夠",
+            "Recharts 與 React 19 相容",
+            "usage_logs 無 user_id（已驗證）"
+          ],
+          "tech_debt": [
+            "topup_logs.amount_usd 為 INTEGER（美分）非 NUMERIC",
+            "middleware.ts 缺 role check（本次解決）",
+            "database.types.ts 手動維護",
+            "usage_logs 缺 user_id，聚合需 JOIN"
+          ],
+          "regression_risks": [
+            "middleware.ts auth guard",
+            "admin.ts route order",
+            "AppLayout navItems"
+          ],
+          "risks": [
+            { "risk": "usage_logs 無 user_id JOIN 效能", "level": "high", "mitigation": "composite index + 10s timeout" },
+            { "risk": "PERCENTILE_CONT 慢查詢", "level": "high", "mitigation": "index + timeout + 前端提示" },
+            { "risk": "middleware.ts 修改回歸", "level": "high", "mitigation": "/auth/me 失敗降級" },
+            { "risk": "Recharts bundle size", "level": "medium", "mitigation": "dynamic import" }
+          ],
+          "unknowns_resolved": {
+            "U1": "topup_logs migration 存在（004_topup_logs.sql）",
+            "U2": "沿用 ADMIN_EMAILS + GET /auth/me",
+            "U3": "選用 Recharts（Tremor 不支援 Tailwind v4）",
+            "U4": "SUM(api_keys.quota_tokens) WHERE active",
+            "U5": "/portal/dashboard"
+          },
+          "impact_scope": {
+            "backend": [
+              { "file": "packages/api-server/src/routes/analytics.ts", "type": "new", "impact": "high" },
+              { "file": "packages/api-server/src/routes/admin.ts", "type": "modified", "impact": "medium" },
+              { "file": "packages/api-server/src/routes/auth.ts", "type": "modified", "impact": "low" },
+              { "file": "packages/api-server/src/services/AggregationService.ts", "type": "new", "impact": "high" },
+              { "file": "packages/api-server/src/services/RatesService.ts", "type": "new", "impact": "medium" },
+              { "file": "packages/api-server/src/index.ts", "type": "modified", "impact": "low" },
+              { "file": "packages/api-server/src/lib/database.types.ts", "type": "modified", "impact": "low" },
+              { "file": "packages/api-server/src/lib/isAdmin.ts", "type": "new", "impact": "low" }
+            ],
+            "frontend": [
+              { "file": "packages/web-admin/src/app/portal/dashboard/page.tsx", "type": "new", "impact": "high" },
+              { "file": "packages/web-admin/src/app/admin/(protected)/analytics/page.tsx", "type": "new", "impact": "high" },
+              { "file": "packages/web-admin/src/app/admin/(protected)/settings/rates/page.tsx", "type": "new", "impact": "medium" },
+              { "file": "packages/web-admin/src/middleware.ts", "type": "modified", "impact": "high" },
+              { "file": "packages/web-admin/src/lib/api.ts", "type": "modified", "impact": "medium" },
+              { "file": "packages/web-admin/src/components/charts/TimeseriesAreaChart.tsx", "type": "new", "impact": "high" },
+              { "file": "packages/web-admin/src/components/charts/LatencyLineChart.tsx", "type": "new", "impact": "high" },
+              { "file": "packages/web-admin/src/components/charts/DonutChart.tsx", "type": "new", "impact": "medium" },
+              { "file": "packages/web-admin/src/components/analytics/StatsCard.tsx", "type": "new", "impact": "low" },
+              { "file": "packages/web-admin/src/components/analytics/PeriodSelector.tsx", "type": "new", "impact": "low" },
+              { "file": "packages/web-admin/src/components/analytics/KeySelector.tsx", "type": "new", "impact": "low" },
+              { "file": "packages/web-admin/src/components/analytics/EmptyState.tsx", "type": "new", "impact": "low" },
+              { "file": "packages/web-admin/src/components/analytics/LoadingSkeleton.tsx", "type": "new", "impact": "low" },
+              { "file": "packages/web-admin/src/components/AppLayout.tsx", "type": "modified", "impact": "medium" },
+              { "file": "packages/web-admin/src/app/portal/layout.tsx", "type": "modified", "impact": "medium" },
+              { "file": "packages/web-admin/package.json", "type": "modified", "impact": "medium" }
+            ],
+            "database": [
+              { "table": "model_rates", "type": "new", "impact": "high" },
+              { "index": "idx_usage_logs_api_key_created", "type": "new", "impact": "high" },
+              { "index": "idx_model_rates_tag_effective", "type": "new", "impact": "medium" }
+            ]
+          },
+          "dependencies": {
+            "upstream": [
+              "usage_logs 表",
+              "api_keys 表",
+              "topup_logs 表",
+              "adminAuth middleware",
+              "supabaseJwtAuth middleware"
+            ],
+            "internal": [
+              "FA-D4 -> FA-D3: model_rates 先建，費用換算才能運作",
+              "FA-D3 -> FA-D1/D2: 前端依賴 API",
+              "GET /auth/me -> middleware role routing"
+            ]
+          }
+        }
+      },
+      "s2": {
+        "status": "skipped",
+        "skip_reason": "Autopilot mode -- S2 spec review skipped per autopilot gate policy"
+      },
+      "s3": {
+        "status": "completed",
+        "agent": "architect",
+        "started_at": "2026-03-15T16:30:00+08:00",
+        "completed_at": "2026-03-15T16:30:00+08:00",
+        "output": {
+          "implementation_plan_path": "dev/specs/analytics-dashboard/s3_implementation_plan.md",
+          "waves": [
+            { "wave": 1, "name": "基礎設施", "tasks": [1, 2, 9], "parallel": true },
+            { "wave": 2, "name": "後端服務 + 前端元件", "tasks": [3, 4, 5, 10, 11, 12], "parallel": true },
+            { "wave": 3, "name": "後端聚合（billing/overview）", "tasks": [6], "parallel": false },
+            { "wave": 4, "name": "後端路由", "tasks": [7, 8], "parallel": true },
+            { "wave": 5, "name": "前端頁面", "tasks": [13, 14, 15], "parallel": false },
+            { "wave": 6, "name": "驗收", "tasks": [16], "parallel": false }
+          ],
+          "total_tasks": 16,
+          "estimated_waves": 6,
+          "verification": {
+            "static_analysis": ["cd packages/api-server && npx tsc --noEmit", "cd packages/web-admin && npx tsc --noEmit"],
+            "unit_tests": ["cd packages/api-server && npx vitest run"],
+            "build": ["cd packages/web-admin && npm run build"]
+          }
+        }
+      },
+      "s4": {
+        "status": "not_started"
+      },
+      "s5": {
+        "status": "not_started"
+      },
+      "s6": {
+        "status": "not_started"
+      },
+      "s7": {
+        "status": "not_started"
+      }
+    }
+  }
+}

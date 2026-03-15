@@ -31,3 +31,10 @@
 
 - In-memory rate limiter 重啟歸零 — 生產環境需評估 Redis 升級時機
   — rate-limiting (2026-03)
+
+## Analytics / 聚合查詢
+
+- usage_logs 無 user_id 欄位，per-user 聚合需 JOIN api_keys — 考慮 denormalize 或物化視圖
+  — analytics-dashboard (2026-03)
+- Tremor v3 不支援 Tailwind v4 — 用 Recharts 替代
+  — analytics-dashboard (2026-03)
