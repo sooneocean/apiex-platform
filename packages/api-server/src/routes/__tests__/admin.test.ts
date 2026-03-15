@@ -167,4 +167,57 @@ describe('Admin Route — T12', () => {
       expect(body.error.code).toBe('admin_required')
     })
   })
+
+  describe('PATCH /admin/users/:id/rate-limit', () => {
+    it('should update rate limit tier and return updated_keys count', async () => {
+      // Mock: rate_limit_tiers lookup succeeds
+      const mockSelectChain = {
+        eq: vi.fn().mockReturnValue({
+          single: vi.fn().mockResolvedValue({ data: { tier: 'pro' }, error: null }),
+        }),
+      }
+      const mockUpdateChain = {
+        eq: vi.fn().mockReturnValue({
+          eq: vi.fn().mockResolvedValue({ data: [{ id: 'key-1' }, { id: 'key-2' }], error: null }),
+        }),
+      }
+
+      mockFrom
+        .mockReturnValueOnce({ select: vi.fn().mockReturnValue(mockSelectChain) }) // rate_limit_tiers
+        .mockReturnValueOnce({ update: vi.fn().mockReturnValue(mockUpdateChain) }) // api_keys
+
+      const res = await app.request('/admin/users/user-1/rate-limit', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tier: 'pro' }),
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data.user_id).toBe('user-1')
+      expect(body.data.tier).toBe('pro')
+      expect(body.data.updated_keys).toBe(2)
+    })
+
+    it('should return 400 when tier does not exist in rate_limit_tiers', async () => {
+      // Mock: tier lookup fails — no row found
+      mockFrom.mockReturnValueOnce({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            single: vi.fn().mockResolvedValue({ data: null, error: { message: 'No row found' } }),
+          }),
+        }),
+      })
+
+      const res = await app.request('/admin/users/user-1/rate-limit', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tier: 'nonexistent_tier' }),
+      })
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.error.code).toBe('invalid_plan')
+    })
+  })
 })
