@@ -26,7 +26,7 @@ import { WebhookService } from '../WebhookService.js'
 /** 建立一個 fluent Supabase query chain mock，最終 resolve 給定的結果 */
 function makeChain(resolveValue: unknown) {
   const chain: Record<string, unknown> = {}
-  const methods = ['select', 'eq', 'insert', 'update', 'upsert', 'delete', 'single', 'limit', 'order', 'gte', 'maybeSingle']
+  const methods = ['select', 'eq', 'insert', 'update', 'upsert', 'delete', 'single', 'limit', 'order', 'gte', 'maybeSingle', 'range', 'in']
   for (const m of methods) {
     chain[m] = vi.fn().mockReturnValue(chain)
   }
@@ -238,94 +238,295 @@ describe('WebhookService', () => {
     })
   })
 
-  // ── checkAndNotifyQuota ───────────────────────────────────────────────────
+  // ── _checkDedup ───────────────────────────────────────────────────────────
+
+  describe('_checkDedup', () => {
+    it('1h 內有記錄時回傳 true（已通知）', async () => {
+      const chain = makeChain({ data: [{ id: 'nl-1' }], error: null })
+      mockFrom.mockReturnValue(chain)
+
+      const result = await service._checkDedup('quota_warning', 'key-1')
+      expect(result).toBe(true)
+    })
+
+    it('1h 內無記錄時回傳 false（允許通知）', async () => {
+      const chain = makeChain({ data: [], error: null })
+      mockFrom.mockReturnValue(chain)
+
+      const result = await service._checkDedup('quota_warning', 'key-1')
+      expect(result).toBe(false)
+    })
+  })
+
+  // ── checkAndNotifyQuota (refactored) ──────────────────────────────────────
 
   describe('checkAndNotifyQuota', () => {
     const userId = 'user-1'
     const keyId = 'key-1'
 
-    it('quota_tokens=-1（無限）時不應觸發通知', async () => {
-      const spy = vi.spyOn(service, 'sendNotification').mockResolvedValue(null)
-      await service.checkAndNotifyQuota(userId, keyId, -1, 99999)
-      expect(spy).not.toHaveBeenCalled()
-    })
+    it('quota_tokens = -1（無限）時不應觸發通知', async () => {
+      // api_keys 查詢回傳 -1（無限）
+      const keyChain = makeChain({ data: { quota_tokens: -1, prefix: 'apx-sk-a', user_id: userId }, error: null })
+      mockFrom.mockReturnValue(keyChain)
 
-    it('quota_tokens=0 時不應觸發通知', async () => {
-      const spy = vi.spyOn(service, 'sendNotification').mockResolvedValue(null)
-      await service.checkAndNotifyQuota(userId, keyId, 0, 0)
-      expect(spy).not.toHaveBeenCalled()
-    })
-
-    it('未達 80% 時不應觸發通知', async () => {
-      const spy = vi.spyOn(service, 'sendNotification').mockResolvedValue(null)
-      // quota=100000，used=70000（70%），remaining=30000
-      // 消耗 = quota - remaining = 70000，消耗比 = 70%
-      await service.checkAndNotifyQuota(userId, keyId, 100000, 70000)
-      expect(spy).not.toHaveBeenCalled()
-    })
-
-    it('消耗達 80% 時觸發 threshold=80 通知', async () => {
-      vi.spyOn(service, '_hasRecentLog').mockResolvedValue(false)
-      const sendSpy = vi.spyOn(service, 'sendNotification').mockResolvedValue({
-        id: 'log-1', webhook_config_id: 'cfg-1', event: 'quota_warning',
-        payload: {}, status_code: 200, response_body: 'OK', created_at: ''
-      })
-      // quota=100000，remaining=18000，消耗=82000（82%）→ 達 80%
-      await service.checkAndNotifyQuota(userId, keyId, 100000, 82000)
-      expect(sendSpy).toHaveBeenCalledOnce()
-      const payload = sendSpy.mock.calls[0][2] as Record<string, unknown>
-      expect(payload.threshold).toBe(80)
-    })
-
-    it('消耗達 90% 時觸發 threshold=90 通知', async () => {
-      vi.spyOn(service, '_hasRecentLog').mockResolvedValue(false)
-      const sendSpy = vi.spyOn(service, 'sendNotification').mockResolvedValue({
-        id: 'log-1', webhook_config_id: 'cfg-1', event: 'quota_warning',
-        payload: {}, status_code: 200, response_body: 'OK', created_at: ''
-      })
-      // quota=100000，remaining=8000，消耗=92000（92%）→ 達 90%（最高吻合）
-      await service.checkAndNotifyQuota(userId, keyId, 100000, 92000)
-      expect(sendSpy).toHaveBeenCalledOnce()
-      const payload = sendSpy.mock.calls[0][2] as Record<string, unknown>
-      expect(payload.threshold).toBe(90)
-    })
-
-    it('消耗達 100% 時觸發 threshold=100 通知', async () => {
-      vi.spyOn(service, '_hasRecentLog').mockResolvedValue(false)
-      const sendSpy = vi.spyOn(service, 'sendNotification').mockResolvedValue({
-        id: 'log-1', webhook_config_id: 'cfg-1', event: 'quota_warning',
-        payload: {}, status_code: 200, response_body: 'OK', created_at: ''
-      })
-      // quota=100000，remaining=0，消耗=100000（100%）
-      await service.checkAndNotifyQuota(userId, keyId, 100000, 100000)
-      expect(sendSpy).toHaveBeenCalledOnce()
-      const payload = sendSpy.mock.calls[0][2] as Record<string, unknown>
-      expect(payload.threshold).toBe(100)
-    })
-
-    it('24h 內已發送過相同閾值不應重複觸發', async () => {
-      vi.spyOn(service, '_hasRecentLog').mockResolvedValue(true) // 已有記錄
       const sendSpy = vi.spyOn(service, 'sendNotification').mockResolvedValue(null)
-      await service.checkAndNotifyQuota(userId, keyId, 100000, 82000)
+      await service.checkAndNotifyQuota(userId, keyId)
       expect(sendSpy).not.toHaveBeenCalled()
     })
 
-    it('payload 應包含正確的欄位', async () => {
-      vi.spyOn(service, '_hasRecentLog').mockResolvedValue(false)
+    it('quota_warning 觸發：剩餘 < 20% 且 > 0', async () => {
+      // 原始配額 100000，剩餘 15000（15% < 20%）
+      const keyChain = makeChain({ data: { quota_tokens: 15000, prefix: 'apx-sk-a', user_id: userId }, error: null })
+      const quotaChain = makeChain({ data: { default_quota_tokens: 100000 }, error: null })
+      const dedupChain = makeChain({ data: [], error: null })
+      const insertChain = makeChain({ data: { id: 'nl-1' }, error: null })
+      const logChain = makeChain({ data: { id: 'log-1', status_code: 200 }, error: null })
+
+      mockFrom
+        .mockReturnValueOnce(keyChain)    // api_keys select
+        .mockReturnValueOnce(quotaChain)  // user_quotas select
+        .mockReturnValueOnce(dedupChain)  // notification_logs dedup check
+        .mockReturnValueOnce(keyChain)    // getConfig (sendNotification)
+        .mockReturnValueOnce(logChain)    // webhook_logs insert
+        .mockReturnValueOnce(insertChain) // notification_logs insert
+
       const sendSpy = vi.spyOn(service, 'sendNotification').mockResolvedValue({
         id: 'log-1', webhook_config_id: 'cfg-1', event: 'quota_warning',
-        payload: {}, status_code: 200, response_body: 'OK', created_at: ''
+        payload: {}, status_code: 200, response_body: 'OK', created_at: '',
       })
-      // quota=100000，remaining=18000，消耗=82000（82%）→ threshold=80
-      await service.checkAndNotifyQuota(userId, keyId, 100000, 82000)
-      const payload = sendSpy.mock.calls[0][2] as Record<string, unknown>
-      expect(payload).toMatchObject({
-        event: 'quota_warning',
-        threshold: 80,
-        key_id: keyId,
-        quota_tokens: 100000,
+
+      await service.checkAndNotifyQuota(userId, keyId)
+      expect(sendSpy).toHaveBeenCalledOnce()
+
+      const [, eventArg, payloadArg] = sendSpy.mock.calls[0]
+      expect(eventArg).toBe('quota_warning')
+      const p = payloadArg as Record<string, unknown>
+      expect(p.event_type).toBe('quota_warning')
+      expect(p.key_id).toBe(keyId)
+      expect(p.current_value).toBe(15000)
+      expect(p.threshold).toBe(20000) // Math.floor(100000 * 0.2)
+      expect(typeof p.timestamp).toBe('string')
+    })
+
+    it('quota_exhausted 觸發：剩餘 = 0', async () => {
+      const keyChain = makeChain({ data: { quota_tokens: 0, prefix: 'apx-sk-a', user_id: userId }, error: null })
+      const quotaChain = makeChain({ data: { default_quota_tokens: 100000 }, error: null })
+      const dedupChain = makeChain({ data: [], error: null })
+      const insertChain = makeChain({ data: { id: 'nl-1' }, error: null })
+
+      mockFrom
+        .mockReturnValueOnce(keyChain)
+        .mockReturnValueOnce(quotaChain)
+        .mockReturnValueOnce(dedupChain)
+        .mockReturnValueOnce(insertChain)
+
+      const sendSpy = vi.spyOn(service, 'sendNotification').mockResolvedValue({
+        id: 'log-1', webhook_config_id: 'cfg-1', event: 'quota_exhausted',
+        payload: {}, status_code: 200, response_body: 'OK', created_at: '',
       })
-      expect(typeof payload.timestamp).toBe('string')
+
+      await service.checkAndNotifyQuota(userId, keyId)
+      expect(sendSpy).toHaveBeenCalledOnce()
+
+      const [, eventArg, payloadArg] = sendSpy.mock.calls[0]
+      expect(eventArg).toBe('quota_exhausted')
+      const p = payloadArg as Record<string, unknown>
+      expect(p.event_type).toBe('quota_exhausted')
+      expect(p.current_value).toBe(0)
+      expect(p.threshold).toBe(100000)
+    })
+
+    it('剩餘 >= 20% 時不應觸發通知', async () => {
+      // 原始配額 100000，剩餘 30000（30% >= 20%）
+      const keyChain = makeChain({ data: { quota_tokens: 30000, prefix: 'apx-sk-a', user_id: userId }, error: null })
+      const quotaChain = makeChain({ data: { default_quota_tokens: 100000 }, error: null })
+
+      mockFrom
+        .mockReturnValueOnce(keyChain)
+        .mockReturnValueOnce(quotaChain)
+
+      const sendSpy = vi.spyOn(service, 'sendNotification').mockResolvedValue(null)
+      await service.checkAndNotifyQuota(userId, keyId)
+      expect(sendSpy).not.toHaveBeenCalled()
+    })
+
+    it('dedup：1h 內已通知同一事件不應重複發送', async () => {
+      const keyChain = makeChain({ data: { quota_tokens: 10000, prefix: 'apx-sk-a', user_id: userId }, error: null })
+      const quotaChain = makeChain({ data: { default_quota_tokens: 100000 }, error: null })
+      const dedupChain = makeChain({ data: [{ id: 'nl-1' }], error: null }) // 已有記錄
+
+      mockFrom
+        .mockReturnValueOnce(keyChain)
+        .mockReturnValueOnce(quotaChain)
+        .mockReturnValueOnce(dedupChain)
+
+      const sendSpy = vi.spyOn(service, 'sendNotification').mockResolvedValue(null)
+      await service.checkAndNotifyQuota(userId, keyId)
+      expect(sendSpy).not.toHaveBeenCalled()
+    })
+  })
+
+  // ── checkAndNotifySpend ───────────────────────────────────────────────────
+
+  describe('checkAndNotifySpend', () => {
+    const userId = 'user-1'
+    const keyId = 'key-1'
+
+    it('spend_limit_usd = -1（無限）時不應觸發通知', async () => {
+      const keyChain = makeChain({ data: { spent_usd: 90, spend_limit_usd: -1, prefix: 'apx-sk-a' }, error: null })
+      mockFrom.mockReturnValue(keyChain)
+
+      const sendSpy = vi.spyOn(service, 'sendNotification').mockResolvedValue(null)
+      await service.checkAndNotifySpend(userId, keyId)
+      expect(sendSpy).not.toHaveBeenCalled()
+    })
+
+    it('spent_usd = 0 時不應觸發通知', async () => {
+      const keyChain = makeChain({ data: { spent_usd: 0, spend_limit_usd: 100, prefix: 'apx-sk-a' }, error: null })
+      mockFrom.mockReturnValue(keyChain)
+
+      const sendSpy = vi.spyOn(service, 'sendNotification').mockResolvedValue(null)
+      await service.checkAndNotifySpend(userId, keyId)
+      expect(sendSpy).not.toHaveBeenCalled()
+    })
+
+    it('spend_warning 觸發：spent > 80% 且 < 100%（spent=85, limit=100）', async () => {
+      const keyChain = makeChain({ data: { spent_usd: 85, spend_limit_usd: 100, prefix: 'apx-sk-a' }, error: null })
+      const dedupChain = makeChain({ data: [], error: null })
+      const insertChain = makeChain({ data: { id: 'nl-1' }, error: null })
+
+      mockFrom
+        .mockReturnValueOnce(keyChain)
+        .mockReturnValueOnce(dedupChain)
+        .mockReturnValueOnce(insertChain)
+
+      const sendSpy = vi.spyOn(service, 'sendNotification').mockResolvedValue({
+        id: 'log-1', webhook_config_id: 'cfg-1', event: 'spend_warning',
+        payload: {}, status_code: 200, response_body: 'OK', created_at: '',
+      })
+
+      await service.checkAndNotifySpend(userId, keyId)
+      expect(sendSpy).toHaveBeenCalledOnce()
+
+      const [, eventArg, payloadArg] = sendSpy.mock.calls[0]
+      expect(eventArg).toBe('spend_warning')
+      const p = payloadArg as Record<string, unknown>
+      expect(p.event_type).toBe('spend_warning')
+      expect(p.key_id).toBe(keyId)
+      expect(p.current_value).toBe(85)
+      expect(p.threshold).toBe(80) // Math.floor(100 * 0.8)
+      expect(typeof p.timestamp).toBe('string')
+      expect(p.key_prefix).toBe('apx-sk-a')
+    })
+
+    it('spend_limit_reached 觸發：spent >= limit（spent=100, limit=100）', async () => {
+      const keyChain = makeChain({ data: { spent_usd: 100, spend_limit_usd: 100, prefix: 'apx-sk-a' }, error: null })
+      const dedupChain = makeChain({ data: [], error: null })
+      const insertChain = makeChain({ data: { id: 'nl-1' }, error: null })
+
+      mockFrom
+        .mockReturnValueOnce(keyChain)
+        .mockReturnValueOnce(dedupChain)
+        .mockReturnValueOnce(insertChain)
+
+      const sendSpy = vi.spyOn(service, 'sendNotification').mockResolvedValue({
+        id: 'log-1', webhook_config_id: 'cfg-1', event: 'spend_limit_reached',
+        payload: {}, status_code: 200, response_body: 'OK', created_at: '',
+      })
+
+      await service.checkAndNotifySpend(userId, keyId)
+      expect(sendSpy).toHaveBeenCalledOnce()
+
+      const [, eventArg, payloadArg] = sendSpy.mock.calls[0]
+      expect(eventArg).toBe('spend_limit_reached')
+      const p = payloadArg as Record<string, unknown>
+      expect(p.event_type).toBe('spend_limit_reached')
+      expect(p.current_value).toBe(100)
+      expect(p.threshold).toBe(100)
+    })
+
+    it('spent <= 80% 時不應觸發通知', async () => {
+      const keyChain = makeChain({ data: { spent_usd: 70, spend_limit_usd: 100, prefix: 'apx-sk-a' }, error: null })
+      mockFrom.mockReturnValue(keyChain)
+
+      const sendSpy = vi.spyOn(service, 'sendNotification').mockResolvedValue(null)
+      await service.checkAndNotifySpend(userId, keyId)
+      expect(sendSpy).not.toHaveBeenCalled()
+    })
+
+    it('dedup：1h 內已通知同一事件不應重複發送', async () => {
+      const keyChain = makeChain({ data: { spent_usd: 85, spend_limit_usd: 100, prefix: 'apx-sk-a' }, error: null })
+      const dedupChain = makeChain({ data: [{ id: 'nl-1' }], error: null }) // 已有記錄
+
+      mockFrom
+        .mockReturnValueOnce(keyChain)
+        .mockReturnValueOnce(dedupChain)
+
+      const sendSpy = vi.spyOn(service, 'sendNotification').mockResolvedValue(null)
+      await service.checkAndNotifySpend(userId, keyId)
+      expect(sendSpy).not.toHaveBeenCalled()
+    })
+
+    it('統一 payload 應包含所有必要欄位：event_type, key_id, key_prefix, current_value, threshold, timestamp', async () => {
+      const keyChain = makeChain({ data: { spent_usd: 95, spend_limit_usd: 100, prefix: 'apx-sk-test' }, error: null })
+      const dedupChain = makeChain({ data: [], error: null })
+      const insertChain = makeChain({ data: { id: 'nl-1' }, error: null })
+
+      mockFrom
+        .mockReturnValueOnce(keyChain)
+        .mockReturnValueOnce(dedupChain)
+        .mockReturnValueOnce(insertChain)
+
+      const sendSpy = vi.spyOn(service, 'sendNotification').mockResolvedValue({
+        id: 'log-1', webhook_config_id: 'cfg-1', event: 'spend_warning',
+        payload: {}, status_code: 200, response_body: 'OK', created_at: '',
+      })
+
+      await service.checkAndNotifySpend(userId, keyId)
+
+      const payloadArg = sendSpy.mock.calls[0][2] as Record<string, unknown>
+      expect(payloadArg).toHaveProperty('event_type')
+      expect(payloadArg).toHaveProperty('key_id')
+      expect(payloadArg).toHaveProperty('key_prefix')
+      expect(payloadArg).toHaveProperty('current_value')
+      expect(payloadArg).toHaveProperty('threshold')
+      expect(payloadArg).toHaveProperty('timestamp')
+      expect(payloadArg.key_prefix).toBe('apx-sk-test')
+    })
+  })
+
+  // ── notification_logs dedup（邊界測試）────────────────────────────────────
+
+  describe('notification_logs dedup 邊界', () => {
+    it('dedup 1h 內不重複：_checkDedup 查到 1h 內記錄 → 回傳 true', async () => {
+      const chain = makeChain({ data: [{ id: 'nl-old' }], error: null })
+      mockFrom.mockReturnValue(chain)
+
+      const alreadySent = await service._checkDedup('quota_warning', 'key-1')
+      expect(alreadySent).toBe(true)
+      // 確認查詢條件有用到 gte（1h 時間視窗）
+      expect(chain.gte).toHaveBeenCalled()
+    })
+
+    it('dedup 超過 1h 允許重發：_checkDedup 查無記錄 → 回傳 false', async () => {
+      const chain = makeChain({ data: [], error: null })
+      mockFrom.mockReturnValue(chain)
+
+      const alreadySent = await service._checkDedup('quota_warning', 'key-1')
+      expect(alreadySent).toBe(false)
+    })
+
+    it('_recordNotification 應寫入 notification_logs 表', async () => {
+      const chain = makeChain({ data: { id: 'nl-1' }, error: null })
+      mockFrom.mockReturnValue(chain)
+
+      await service._recordNotification('quota_warning', 'key-1', 'user-1')
+      expect(mockFrom).toHaveBeenCalledWith('notification_logs')
+      expect(chain.insert).toHaveBeenCalledWith({
+        event_type: 'quota_warning',
+        key_id: 'key-1',
+        user_id: 'user-1',
+      })
     })
   })
 })

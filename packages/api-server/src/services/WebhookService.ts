@@ -23,20 +23,25 @@ export interface WebhookLog {
   created_at: string
 }
 
-export interface QuotaWarningPayload {
-  event: 'quota_warning'
-  threshold: number
+/**
+ * Unified notification payload format for all 4 event types.
+ * - quota_warning:       current_value = remaining tokens, threshold = original_quota * 0.2
+ * - quota_exhausted:     current_value = 0, threshold = original quota
+ * - spend_warning:       current_value = spent_usd (cents), threshold = spend_limit_usd * 0.8
+ * - spend_limit_reached: current_value = spent_usd (cents), threshold = spend_limit_usd
+ */
+export interface NotificationPayload {
+  event_type: string
   key_id: string
-  quota_tokens: number
-  used_tokens: number
-  usage_percent: number
+  key_prefix: string
+  current_value: number
+  threshold: number
   timestamp: string
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const QUOTA_THRESHOLDS = [80, 90, 100] as const
-const DEDUP_WINDOW_HOURS = 24
+const DEDUP_WINDOW_HOURS = 1
 
 // ─── WebhookService ───────────────────────────────────────────────────────────
 
@@ -190,95 +195,172 @@ export class WebhookService {
   }
 
   /**
-   * 檢查是否在過去 24h 內已發過同一 key + threshold 的通知
+   * 查詢過去 1h 內是否有同 event_type + key_id 的 dedup 記錄
    * @internal 暴露給測試使用
    */
-  async _hasRecentLog(
-    userId: string,
-    keyId: string,
-    threshold: number
-  ): Promise<boolean> {
-    const config = await this.getConfig(userId)
-    if (!config) return false
-
+  async _checkDedup(eventType: string, keyId: string): Promise<boolean> {
     const since = new Date(Date.now() - DEDUP_WINDOW_HOURS * 60 * 60 * 1000).toISOString()
 
     const { data } = await supabaseAdmin
-      .from('webhook_logs')
+      .from('notification_logs')
       .select('id')
-      .eq('webhook_config_id', config.id)
-      .eq('event', 'quota_warning')
+      .eq('event_type', eventType)
+      .eq('key_id', keyId)
       .gte('created_at', since)
       .limit(1)
 
-    if (!data || data.length === 0) return false
-
-    // 檢查 payload 中 key_id 和 threshold 是否吻合
-    const { data: matchData } = await supabaseAdmin
-      .from('webhook_logs')
-      .select('id, payload')
-      .eq('webhook_config_id', config.id)
-      .eq('event', 'quota_warning')
-      .gte('created_at', since)
-
-    if (!matchData) return false
-
-    return (matchData as Array<{ payload: Record<string, unknown> }>).some(
-      (row) => row.payload?.key_id === keyId && row.payload?.threshold === threshold
-    )
+    return Array.isArray(data) && data.length > 0
   }
 
   /**
-   * 檢查配額閾值並觸發通知
-   *
-   * 計算邏輯：
-   *   usedRatio = (quotaTokens - remaining) / quotaTokens × 100
-   *   其中 remaining = quotaTokens - usedSinceStart
-   *
-   * 注意：currentUsed 是從 proxy 傳入的「本次請求 token 數」，
-   * 但閾值判斷需要的是「總消耗比例」。
-   * 由於 settleQuota 已更新 DB，這裡需要查詢 DB 中實際剩餘量。
-   * 為簡化，本方法接受 currentUsed 作為「已消耗 token 數」。
-   *
-   * 觸發規則：選出 usedPercent 達到的「最高閾值」發送一次通知。
-   * 防重複：同一 key + 同一 threshold 在 24h 內只發一次。
+   * 寫入 notification_logs，記錄本次通知（dedup 用）
+   * @internal 暴露給測試使用
    */
-  async checkAndNotifyQuota(
-    userId: string,
-    keyId: string,
-    quotaTokens: number,
-    currentUsed: number
-  ): Promise<void> {
-    // 無限配額或配額為 0 跳過
-    if (quotaTokens <= 0) return
+  async _recordNotification(eventType: string, keyId: string, userId: string): Promise<void> {
+    await supabaseAdmin
+      .from('notification_logs')
+      .insert({ event_type: eventType, key_id: keyId, user_id: userId })
+  }
 
-    const usedPercent = (currentUsed / quotaTokens) * 100
+  /**
+   * 檢查配額並觸發通知
+   *
+   * 查詢 DB 中 api_keys.quota_tokens（當前剩餘量）及
+   * user_quotas.default_quota_tokens（原始配額，用來計算 20% 門檻）：
+   * - quota_tokens = -1（無限制）→ 跳過
+   * - 剩餘 = 0 → quota_exhausted
+   * - 剩餘 < original_quota * 0.2（< 20%）→ quota_warning
+   * - 1h 內相同 event + key 已通知 → dedup 跳過
+   */
+  async checkAndNotifyQuota(userId: string, keyId: string): Promise<void> {
+    // 查詢 api_keys：當前剩餘量 + prefix + user_id
+    const { data: keyData } = await supabaseAdmin
+      .from('api_keys')
+      .select('quota_tokens, prefix, user_id')
+      .eq('id', keyId)
+      .single()
 
-    // 找出達到的最高閾值（100 > 90 > 80）
-    let triggeredThreshold: number | null = null
-    for (const threshold of [...QUOTA_THRESHOLDS].reverse()) {
-      if (usedPercent >= threshold) {
-        triggeredThreshold = threshold
-        break
-      }
+    if (!keyData) return
+
+    const { quota_tokens: remaining, prefix, user_id: keyUserId } = keyData as {
+      quota_tokens: number
+      prefix: string
+      user_id: string
     }
 
-    if (triggeredThreshold === null) return
+    // -1 = 無限制，跳過
+    if (remaining === -1) return
 
-    // 防重複：24h 內相同 key + threshold 已發過則跳過
-    const alreadySent = await this._hasRecentLog(userId, keyId, triggeredThreshold)
+    // 查詢原始配額（user_quotas.default_quota_tokens）
+    const { data: quotaData } = await supabaseAdmin
+      .from('user_quotas')
+      .select('default_quota_tokens')
+      .eq('user_id', keyUserId)
+      .single()
+
+    const originalQuota = (quotaData as { default_quota_tokens: number } | null)?.default_quota_tokens ?? 0
+
+    // 原始配額 <= 0 跳過
+    if (originalQuota <= 0) return
+
+    // 判斷事件類型
+    let eventType: string
+    let currentValue: number
+    let threshold: number
+
+    const warningThreshold = Math.floor(originalQuota * 0.2)
+
+    if (remaining === 0) {
+      eventType = 'quota_exhausted'
+      currentValue = 0
+      threshold = originalQuota
+    } else if (remaining < warningThreshold) {
+      eventType = 'quota_warning'
+      currentValue = remaining
+      threshold = warningThreshold
+    } else {
+      // 剩餘 >= 20%，不觸發
+      return
+    }
+
+    // dedup 檢查
+    const alreadySent = await this._checkDedup(eventType, keyId)
     if (alreadySent) return
 
-    const payload: QuotaWarningPayload = {
-      event: 'quota_warning',
-      threshold: triggeredThreshold,
+    const payload: NotificationPayload = {
+      event_type: eventType,
       key_id: keyId,
-      quota_tokens: quotaTokens,
-      used_tokens: currentUsed,
-      usage_percent: Math.round(usedPercent * 10) / 10,
+      key_prefix: prefix ?? '',
+      current_value: currentValue,
+      threshold: threshold,
       timestamp: new Date().toISOString(),
     }
 
-    await this.sendNotification(userId, 'quota_warning', payload as unknown as Record<string, unknown>)
+    await this.sendNotification(userId, eventType, payload as unknown as Record<string, unknown>)
+    await this._recordNotification(eventType, keyId, userId)
+  }
+
+  /**
+   * 檢查花費並觸發通知
+   *
+   * 查詢 DB 中 api_keys 的 spent_usd 和 spend_limit_usd：
+   * - spend_limit_usd = -1（無限）→ 跳過
+   * - spent = 0 → 跳過（無任何花費）
+   * - spent >= spend_limit → spend_limit_reached
+   * - spent > spend_limit * 0.8（> 80%）→ spend_warning
+   * - 1h 內相同 event + key 已通知 → dedup 跳過
+   */
+  async checkAndNotifySpend(userId: string, keyId: string): Promise<void> {
+    const { data: keyData } = await supabaseAdmin
+      .from('api_keys')
+      .select('spent_usd, spend_limit_usd, prefix')
+      .eq('id', keyId)
+      .single()
+
+    if (!keyData) return
+
+    const { spent_usd: spentUsd, spend_limit_usd: spendLimit, prefix } = keyData as {
+      spent_usd: number
+      spend_limit_usd: number
+      prefix: string
+    }
+
+    // 無限花費（-1）跳過
+    if (spendLimit === -1) return
+
+    // spent = 0 跳過（沒有任何花費）
+    if (spentUsd === 0) return
+
+    let eventType: string
+    let currentValue: number
+    let threshold: number
+
+    if (spentUsd >= spendLimit) {
+      eventType = 'spend_limit_reached'
+      currentValue = spentUsd
+      threshold = spendLimit
+    } else if (spentUsd > Math.floor(spendLimit * 0.8)) {
+      eventType = 'spend_warning'
+      currentValue = spentUsd
+      threshold = Math.floor(spendLimit * 0.8)
+    } else {
+      return
+    }
+
+    // dedup 檢查
+    const alreadySent = await this._checkDedup(eventType, keyId)
+    if (alreadySent) return
+
+    const payload: NotificationPayload = {
+      event_type: eventType,
+      key_id: keyId,
+      key_prefix: prefix ?? '',
+      current_value: currentValue,
+      threshold: threshold,
+      timestamp: new Date().toISOString(),
+    }
+
+    await this.sendNotification(userId, eventType, payload as unknown as Record<string, unknown>)
+    await this._recordNotification(eventType, keyId, userId)
   }
 }
