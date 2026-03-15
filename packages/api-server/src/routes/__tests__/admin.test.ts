@@ -440,3 +440,247 @@ describe('Admin Route — T12', () => {
     })
   })
 })
+
+// =============================================================================
+// FA-E — model-management route admin tests (T19 Red → Green)
+// /admin/routes endpoints
+// =============================================================================
+
+describe('Admin Routes — FA-E /admin/routes CRUD', () => {
+  let app: Hono
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    app = new Hono()
+    app.use('/admin/*', async (c, next) => {
+      c.set('userId', 'admin-uuid')
+      c.set('user', { id: 'admin-uuid', email: 'admin@example.com' })
+      await next()
+    })
+    app.route('/admin', adminRoutes())
+  })
+
+  const mockRoute = {
+    id: 'route-uuid-1',
+    tag: 'apex-smart',
+    upstream_provider: 'anthropic',
+    upstream_model: 'claude-opus-4-6',
+    upstream_base_url: 'https://api.anthropic.com',
+    is_active: true,
+    updated_at: '2026-03-15T00:00:00Z',
+  }
+
+  // ─── GET /admin/routes ───────────────────────────────────────────────────
+
+  describe('GET /admin/routes', () => {
+    it('should return list of all route_config records', async () => {
+      const chain = {
+        select: vi.fn().mockReturnThis(),
+        order: vi.fn().mockReturnThis(),
+      }
+      chain.order = vi.fn()
+        .mockReturnValueOnce(chain)
+        .mockResolvedValueOnce({ data: [mockRoute], error: null })
+      mockFrom.mockReturnValueOnce(chain)
+
+      const res = await app.request('/admin/routes')
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(Array.isArray(body.data)).toBe(true)
+    })
+  })
+
+  // ─── POST /admin/routes ──────────────────────────────────────────────────
+
+  describe('POST /admin/routes', () => {
+    it('should create a new route and return 201', async () => {
+      const insertChain = {
+        insert: vi.fn().mockReturnThis(),
+        select: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({ data: mockRoute, error: null }),
+      }
+      mockFrom.mockReturnValueOnce(insertChain)
+
+      const res = await app.request('/admin/routes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tag: 'apex-smart',
+          upstream_provider: 'anthropic',
+          upstream_model: 'claude-opus-4-6',
+          upstream_base_url: 'https://api.anthropic.com',
+        }),
+      })
+
+      expect(res.status).toBe(201)
+      const body = await res.json()
+      expect(body.data).toBeDefined()
+    })
+
+    it('should return 400 when required fields are missing', async () => {
+      const res = await app.request('/admin/routes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tag: 'apex-smart' }),
+      })
+
+      expect(res.status).toBe(400)
+    })
+  })
+
+  // ─── PATCH /admin/routes/:id ─────────────────────────────────────────────
+
+  describe('PATCH /admin/routes/:id', () => {
+    it('should update route fields and return 200', async () => {
+      const updated = { ...mockRoute, upstream_model: 'claude-sonnet-4-6' }
+      const updateChain = {
+        update: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        select: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({ data: updated, error: null }),
+      }
+      mockFrom.mockReturnValueOnce(updateChain)
+
+      const res = await app.request('/admin/routes/route-uuid-1', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ upstream_model: 'claude-sonnet-4-6' }),
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data).toBeDefined()
+    })
+  })
+
+  // ─── PATCH /admin/routes/:id/toggle ─────────────────────────────────────
+
+  describe('PATCH /admin/routes/:id/toggle', () => {
+    it('should toggle is_active from true to false and return 200', async () => {
+      // 1st call: fetch current record
+      const selectChain = {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({ data: mockRoute, error: null }),
+      }
+      // 2nd call: count active routes for same tag (2 active, so no warning)
+      const countChain = {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+      }
+      countChain.eq = vi.fn()
+        .mockReturnValueOnce({
+          ...countChain,
+          eq: vi.fn().mockResolvedValue({ data: [mockRoute, { ...mockRoute, id: 'route-uuid-2' }], error: null }),
+        })
+      // 3rd call: update
+      const updateChain = {
+        update: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        select: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({ data: { ...mockRoute, is_active: false }, error: null }),
+      }
+      mockFrom
+        .mockReturnValueOnce(selectChain)
+        .mockReturnValueOnce({ select: vi.fn().mockReturnValue(countChain) })
+        .mockReturnValueOnce(updateChain)
+
+      const res = await app.request('/admin/routes/route-uuid-1/toggle', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data).toBeDefined()
+      expect(body.warning).toBeUndefined()
+    })
+
+    it('should return warning when toggling the last active route for a tag', async () => {
+      // 1st call: fetch current record (is_active: true)
+      const selectChain = {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({ data: mockRoute, error: null }),
+      }
+      // 2nd call: count active routes -> only 1
+      const countChain = {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+      }
+      countChain.eq = vi.fn()
+        .mockReturnValueOnce({
+          ...countChain,
+          eq: vi.fn().mockResolvedValue({ data: [mockRoute], error: null }),
+        })
+      // 3rd call: update
+      const updateChain = {
+        update: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        select: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({ data: { ...mockRoute, is_active: false }, error: null }),
+      }
+      mockFrom
+        .mockReturnValueOnce(selectChain)
+        .mockReturnValueOnce({ select: vi.fn().mockReturnValue(countChain) })
+        .mockReturnValueOnce(updateChain)
+
+      const res = await app.request('/admin/routes/route-uuid-1/toggle', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.warning).toBe('last_active_route')
+    })
+
+    it('should return 404 when route does not exist', async () => {
+      const selectChain = {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({
+          data: null,
+          error: { code: 'PGRST116', message: 'no rows' },
+        }),
+      }
+      mockFrom.mockReturnValueOnce(selectChain)
+
+      const res = await app.request('/admin/routes/nonexistent-id/toggle', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+
+      expect(res.status).toBe(404)
+    })
+  })
+
+  // ─── Authorization ───────────────────────────────────────────────────────
+
+  describe('Authorization — /admin/routes', () => {
+    it('should return 403 when not admin', async () => {
+      const noAdminApp = new Hono()
+      noAdminApp.use('/admin/*', async () => {
+        return new Response(
+          JSON.stringify({
+            error: {
+              message: 'Admin access required.',
+              type: 'authorization_error',
+              code: 'admin_required',
+            },
+          }),
+          { status: 403, headers: { 'Content-Type': 'application/json' } }
+        )
+      })
+      noAdminApp.route('/admin', adminRoutes())
+
+      const res = await noAdminApp.request('/admin/routes')
+      expect(res.status).toBe(403)
+      const body = await res.json()
+      expect(body.error.code).toBe('admin_required')
+    })
+  })
+})

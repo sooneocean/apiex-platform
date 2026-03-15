@@ -1,0 +1,139 @@
+{
+  "sdd_context": {
+    "version": "2.8.0",
+    "feature": "model-management",
+    "current_stage": "S7",
+    "spec_mode": "quick",
+    "spec_mode_reason": "改動範圍小：1 個新頁面、3-4 個 API endpoints、不動 DB schema",
+    "work_type": "new_feature",
+    "spec_folder": "dev/specs/model-management",
+    "execution_mode": "autopilot",
+    "status": "completed",
+    "started_at": "2026-03-15T10:00:00+08:00",
+    "last_updated": "2026-03-15T10:00:00+08:00",
+    "last_updated_by": "requirement-analyst",
+    "stages": {
+      "s0": {
+        "status": "pending_confirmation",
+        "agent": "requirement-analyst",
+        "started_at": "2026-03-15T10:00:00+08:00",
+        "completed_at": null,
+        "output": {
+          "brief_spec_path": "dev/specs/model-management/s0_brief_spec.md",
+          "work_type": "new_feature",
+          "requirement": "Admin 可在 Web UI 的 /admin/settings/routes 頁面新增、編輯、啟用/停用 route_config 路由設定，不再需要直接操作 Supabase DB",
+          "goal": "為已存在的 route_config 表提供 Admin UI 管理介面，透過現有 adminAuth middleware 完成路由 CRUD 操作",
+          "pain_points": [
+            "Admin 必須直接進 Supabase Dashboard 操作 DB 才能管理模型路由，容易誤改資料",
+            "無 UI 可檢視所有路由狀態（含 inactive），難以掌握整體路由健康度",
+            "切換 is_active 需要手寫 SQL UPDATE，步驟多、高風險"
+          ],
+          "success_criteria": [
+            "Admin 在 /admin/settings/routes 可看到所有路由，inactive 路由以灰色標記",
+            "Admin 可透過表單新增路由（tag + upstream_provider + upstream_model + upstream_base_url）",
+            "Admin 可編輯既有路由的任意欄位",
+            "Admin 可切換路由 is_active 狀態（toggle）",
+            "非 Admin 呼叫路由管理 API 回傳 403",
+            "停用唯一 active 路由時，UI 顯示警告提示（仍允許操作）"
+          ],
+          "scope_in": [
+            "GET /admin/routes — 列出所有 route_config（含 inactive）",
+            "POST /admin/routes — 新增路由",
+            "PATCH /admin/routes/:id — 部分更新路由欄位",
+            "PATCH /admin/routes/:id/toggle — 切換 is_active",
+            "/admin/settings/routes 頁面（路由列表 + 表單）",
+            "AppLayout sidebar 新增 Settings: Routes 導覽項"
+          ],
+          "scope_out": [
+            "route_config 表結構變更（不新增 migration）",
+            "路由健康檢查、延遲測試",
+            "路由優先級、權重管理",
+            "批次操作",
+            "刪除路由"
+          ],
+          "constraints": [
+            "Auth 使用現有 adminAuth middleware，ADMIN_EMAILS whitelist",
+            "透過 supabaseAdmin client（service role）操作 route_config 表",
+            "後端 handler 加入現有 adminRoutes() function",
+            "前端沿用 Next.js App Router + AppLayout + Tailwind"
+          ],
+          "exceptions": [
+            {
+              "id": "E1",
+              "dimension": "並行/競爭",
+              "scenario": "兩個 Admin 同時 PATCH 同一路由",
+              "handling": "Last write wins（DB 層 updated_at 覆蓋），不加分散式鎖"
+            },
+            {
+              "id": "E2",
+              "dimension": "資料邊界",
+              "scenario": "新增路由時 tag 已存在於 active 路由",
+              "handling": "DB unique index idx_route_config_tag_active 攔截，API 回傳 409 Conflict"
+            },
+            {
+              "id": "E3",
+              "dimension": "資料邊界",
+              "scenario": "必填欄位為空或格式錯誤",
+              "handling": "API 層回傳 400 Bad Request + 欄位明細；前端表單同步驗證"
+            },
+            {
+              "id": "E4",
+              "dimension": "業務邏輯",
+              "scenario": "停用唯一 active 路由（proxy 將 503）",
+              "handling": "允許操作；toggle 前計算 active 路由數，若 = 1 回傳 warning: last_active_route；UI 顯示確認提示"
+            },
+            {
+              "id": "E5",
+              "dimension": "網路/外部",
+              "scenario": "API 請求失敗（網路中斷、5xx）",
+              "handling": "UI 顯示錯誤訊息，不清空表單，允許重試"
+            },
+            {
+              "id": "E6",
+              "dimension": "UI/體驗",
+              "scenario": "表單送出中途切換頁面",
+              "handling": "不在 must scope，無特殊保護"
+            }
+          ],
+          "functional_areas": [
+            {
+              "id": "FA-E",
+              "name": "模型路由管理 Admin UI",
+              "description": "Admin 在 /admin/settings/routes 管理 route_config，CRUD 操作透過 API endpoints",
+              "independence": "high"
+            }
+          ],
+          "decomposition_strategy": "single_sop",
+          "child_sops": []
+        }
+      },
+      "s1": {
+        "status": "pending",
+        "agents": ["codebase-explorer", "architect"]
+      },
+      "s2": {
+        "status": "pending",
+        "agent": "reviewer"
+      },
+      "s3": {
+        "status": "pending",
+        "agent": "architect"
+      },
+      "s4": {
+        "status": "pending"
+      },
+      "s5": {
+        "status": "pending",
+        "agent": "reviewer"
+      },
+      "s6": {
+        "status": "pending",
+        "agent": "test-engineer"
+      },
+      "s7": {
+        "status": "pending",
+        "agent": "git-operator"
+      }
+    }
+  }
+}
