@@ -8,6 +8,7 @@ import { proxyRoutes } from './routes/proxy.js'
 import { authRoutes } from './routes/auth.js'
 import { keysRoutes } from './routes/keys.js'
 import { adminRoutes } from './routes/admin.js'
+import { topupRoutes, topupWebhookRoute } from './routes/topup.js'
 
 export function createApp() {
   const app = new Hono()
@@ -46,6 +47,16 @@ export function createApp() {
   // Usage routes (API Key or JWT) — usage/summary is served under /v1/usage/summary via proxy routes
   const usage = new Hono()
   app.route('/usage', usage)
+
+  // Topup webhook — no auth, must be registered BEFORE the JWT-protected /topup/* group
+  const webhook = topupWebhookRoute()
+  app.route('/topup/webhook', webhook)
+
+  // Topup routes (Supabase JWT auth)
+  const topup = new Hono()
+  topup.use('*', supabaseJwtAuth)
+  topup.route('/', topupRoutes())
+  app.route('/topup', topup)
 
   // Admin routes (Admin JWT auth)
   const admin = new Hono()
