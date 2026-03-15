@@ -1,0 +1,109 @@
+{
+  "sdd_context": {
+    "version": "3.0.0",
+    "feature": "deps-upgrade",
+    "feature_name": "依賴套件批次升級 — Next.js 16、Anthropic SDK、vitest 4、MCP SDK",
+    "current_stage": "S7",
+    "spec_mode": "quick",
+    "spec_mode_reason": "依賴升級，無新 DB/API，主要是 package.json + breaking change 修復",
+    "work_type": "enhancement",
+    "spec_folder": "dev/specs/2026-03-15_4_deps-upgrade",
+    "execution_mode": "autopilot",
+    "status": "completed",
+    "started_at": "2026-03-15T15:30:00Z",
+    "completed_at": "2026-03-16T00:00:00Z",
+    "last_updated": "2026-03-16T00:00:00Z",
+    "last_updated_by": "git-operator",
+    "stages": {
+      "s0": {
+        "status": "completed",
+        "agent": "requirement-analyst",
+        "started_at": "2026-03-15T15:30:00Z",
+        "completed_at": "2026-03-15T15:32:00Z",
+        "output": {
+          "work_type": "enhancement",
+          "requirement": "將 4 個關鍵依賴升至最新版：Next.js 15→16、@anthropic-ai/sdk 0.39→0.78、vitest 2→4、@modelcontextprotocol/sdk 1.12→1.27",
+          "goal": "保持依賴現代化，取得新版效能改善與 bug 修復，確保 build/test/typecheck 全通過",
+          "success_criteria": [
+            "SC-1: Next.js 升級至 16.x，web-admin 全頁面正常運作",
+            "SC-2: @anthropic-ai/sdk 升級至 0.78，API proxy 功能正常",
+            "SC-3: vitest 升級至 4.x，全部現有測試通過",
+            "SC-4: @modelcontextprotocol/sdk 升級至 1.27，MCP server 功能正常",
+            "SC-5: pnpm build 全 package 零錯誤",
+            "SC-6: pnpm typecheck 零錯誤"
+          ]
+        }
+      },
+      "s1": {
+        "status": "completed",
+        "agents": ["codebase-explorer"],
+        "started_at": "2026-03-15T15:35:00Z",
+        "completed_at": "2026-03-15T15:40:00Z"
+      },
+      "s2": {"status": "skipped", "reason": "Quick mode"},
+      "s3": {"status": "completed"},
+      "s4": {
+        "status": "completed",
+        "started_at": "2026-03-15T15:42:00Z",
+        "completed_at": "2026-03-16T00:00:00Z",
+        "output": {
+          "build_status": "pass",
+          "completed_tasks": ["T1", "T2", "T3", "T4", "T5"],
+          "changes": [
+            "packages/api-server/package.json",
+            "packages/cli/package.json",
+            "packages/mcp-server/package.json",
+            "packages/web-admin/package.json",
+            "packages/web-admin/next.config.ts",
+            "packages/api-server/src/__tests__/webhook.test.ts",
+            "packages/api-server/src/routes/__tests__/admin.test.ts",
+            "packages/api-server/src/routes/__tests__/proxy.test.ts",
+            "packages/api-server/src/services/__tests__/RouterService.test.ts",
+            "packages/api-server/src/services/__tests__/WebhookService.test.ts",
+            "packages/mcp-server/src/__tests__/tools.test.ts",
+            "pnpm-lock.yaml"
+          ]
+        }
+      },
+      "s5": {
+        "status": "completed",
+        "output": {
+          "conclusion": "pass",
+          "score": 95,
+          "notes": "全部 258 測試通過、build 零錯誤零警告、typecheck 通過、所有 breaking changes 已修復"
+        }
+      },
+      "s6": {
+        "status": "completed",
+        "output": {
+          "automated_tests": {
+            "api-server": "19 files, 249 tests passed",
+            "cli": "1 file, 8 tests passed",
+            "mcp-server": "1 file, 1 test passed"
+          },
+          "build_verification": {
+            "web-admin_build": "pass",
+            "web-admin_typecheck": "pass",
+            "monorepo_build": "pass"
+          }
+        }
+      },
+      "s7": {"status": "completed"},
+      "lessons_learned": {
+        "what_went_well": [
+          "Next.js 16 codemod 自動升級 package.json，web-admin 零手動修改（除移除廢棄 eslint 設定）",
+          "@anthropic-ai/sdk 是幽靈依賴，升級零風險",
+          "next-intl createNextIntlPlugin 完全相容 Next.js 16"
+        ],
+        "what_went_wrong": [
+          "vitest 4 的 vi.fn().mockImplementation() 不再能被 new 呼叫 — 5 個測試檔需改用 class 語法",
+          "vitest 4 的 vi.clearAllMocks() 不清除 mockReturnValueOnce 佇列（對齊 Jest 行為），導致測試間狀態洩漏"
+        ],
+        "new_pitfalls": [
+          "vitest-4-constructor-mock: vi.fn().mockImplementation(() => {...}) 在 vitest 4 不能被 new 呼叫，需改用 class 語法 mock",
+          "vitest-4-clearAllMocks: vi.clearAllMocks() 不清除 mockReturnValueOnce 佇列，若測試有未消費的 mockReturnValueOnce 值會洩漏到下一個測試。需使用 vi.resetAllMocks() 或確保每個測試消費所有 mock 值"
+        ]
+      }
+    }
+  }
+}

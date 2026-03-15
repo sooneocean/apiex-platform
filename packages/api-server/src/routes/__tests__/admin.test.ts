@@ -18,9 +18,9 @@ vi.mock('../../lib/supabase.js', () => ({
 const mockResetSpend = vi.fn()
 
 vi.mock('../../services/KeyService.js', () => ({
-  KeyService: vi.fn().mockImplementation(() => ({
-    resetSpend: (...args: unknown[]) => mockResetSpend(...args),
-  })),
+  KeyService: class {
+    resetSpend = (...args: unknown[]) => mockResetSpend(...args)
+  },
 }))
 
 // Helper: build a full Supabase chain stub ending in a resolved value

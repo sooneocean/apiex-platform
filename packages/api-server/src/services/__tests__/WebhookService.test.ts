@@ -36,20 +36,27 @@ function makeChain(resolveValue: unknown) {
   return chain
 }
 
+// vitest 4: vi.spyOn on prototype methods may not intercept this.method() calls.
+// Use direct assignment + helper to maintain spy-like API.
+function mockMethod<T extends object, K extends keyof T>(
+  obj: T, key: K, impl: (...args: unknown[]) => unknown
+) {
+  const fn = vi.fn().mockImplementation(impl);
+  (obj as Record<string, unknown>)[key as string] = fn
+  return fn
+}
+
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 describe('WebhookService', () => {
   let service: WebhookService
 
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.restoreAllMocks()
+    vi.resetAllMocks()
     service = new WebhookService()
     // Skip SSRF DNS validation in tests
-    vi.spyOn(service, '_validateUrlSafety').mockResolvedValue(undefined)
-  })
-
-  afterEach(() => {
-    vi.restoreAllMocks()
+    ;(service as unknown as Record<string, unknown>)._validateUrlSafety = vi.fn().mockResolvedValue(undefined)
   })
 
   // ── getConfig ──────────────────────────────────────────────────────────────
@@ -274,7 +281,7 @@ describe('WebhookService', () => {
       const keyChain = makeChain({ data: { quota_tokens: -1, prefix: 'apx-sk-a', user_id: userId }, error: null })
       mockFrom.mockReturnValue(keyChain)
 
-      const sendSpy = vi.spyOn(service, 'sendNotification').mockResolvedValue(null)
+      const sendSpy = mockMethod(service, 'sendNotification', () => Promise.resolve(null))
       await service.checkAndNotifyQuota(userId, keyId)
       expect(sendSpy).not.toHaveBeenCalled()
     })
@@ -295,10 +302,10 @@ describe('WebhookService', () => {
         .mockReturnValueOnce(logChain)    // webhook_logs insert
         .mockReturnValueOnce(insertChain) // notification_logs insert
 
-      const sendSpy = vi.spyOn(service, 'sendNotification').mockResolvedValue({
+      const sendSpy = mockMethod(service, 'sendNotification', () => Promise.resolve({
         id: 'log-1', webhook_config_id: 'cfg-1', event: 'quota_warning',
         payload: {}, status_code: 200, response_body: 'OK', created_at: '',
-      })
+      }))
 
       await service.checkAndNotifyQuota(userId, keyId)
       expect(sendSpy).toHaveBeenCalledOnce()
@@ -325,10 +332,10 @@ describe('WebhookService', () => {
         .mockReturnValueOnce(dedupChain)
         .mockReturnValueOnce(insertChain)
 
-      const sendSpy = vi.spyOn(service, 'sendNotification').mockResolvedValue({
+      const sendSpy = mockMethod(service, 'sendNotification', () => Promise.resolve({
         id: 'log-1', webhook_config_id: 'cfg-1', event: 'quota_exhausted',
         payload: {}, status_code: 200, response_body: 'OK', created_at: '',
-      })
+      }))
 
       await service.checkAndNotifyQuota(userId, keyId)
       expect(sendSpy).toHaveBeenCalledOnce()
@@ -350,7 +357,7 @@ describe('WebhookService', () => {
         .mockReturnValueOnce(keyChain)
         .mockReturnValueOnce(quotaChain)
 
-      const sendSpy = vi.spyOn(service, 'sendNotification').mockResolvedValue(null)
+      const sendSpy = mockMethod(service, 'sendNotification', () => Promise.resolve(null))
       await service.checkAndNotifyQuota(userId, keyId)
       expect(sendSpy).not.toHaveBeenCalled()
     })
@@ -365,7 +372,7 @@ describe('WebhookService', () => {
         .mockReturnValueOnce(quotaChain)
         .mockReturnValueOnce(dedupChain)
 
-      const sendSpy = vi.spyOn(service, 'sendNotification').mockResolvedValue(null)
+      const sendSpy = mockMethod(service, 'sendNotification', () => Promise.resolve(null))
       await service.checkAndNotifyQuota(userId, keyId)
       expect(sendSpy).not.toHaveBeenCalled()
     })
@@ -381,7 +388,7 @@ describe('WebhookService', () => {
       const keyChain = makeChain({ data: { spent_usd: 90, spend_limit_usd: -1, prefix: 'apx-sk-a' }, error: null })
       mockFrom.mockReturnValue(keyChain)
 
-      const sendSpy = vi.spyOn(service, 'sendNotification').mockResolvedValue(null)
+      const sendSpy = mockMethod(service, 'sendNotification', () => Promise.resolve(null))
       await service.checkAndNotifySpend(userId, keyId)
       expect(sendSpy).not.toHaveBeenCalled()
     })
@@ -390,7 +397,7 @@ describe('WebhookService', () => {
       const keyChain = makeChain({ data: { spent_usd: 0, spend_limit_usd: 100, prefix: 'apx-sk-a' }, error: null })
       mockFrom.mockReturnValue(keyChain)
 
-      const sendSpy = vi.spyOn(service, 'sendNotification').mockResolvedValue(null)
+      const sendSpy = mockMethod(service, 'sendNotification', () => Promise.resolve(null))
       await service.checkAndNotifySpend(userId, keyId)
       expect(sendSpy).not.toHaveBeenCalled()
     })
@@ -405,10 +412,10 @@ describe('WebhookService', () => {
         .mockReturnValueOnce(dedupChain)
         .mockReturnValueOnce(insertChain)
 
-      const sendSpy = vi.spyOn(service, 'sendNotification').mockResolvedValue({
+      const sendSpy = mockMethod(service, 'sendNotification', () => Promise.resolve({
         id: 'log-1', webhook_config_id: 'cfg-1', event: 'spend_warning',
         payload: {}, status_code: 200, response_body: 'OK', created_at: '',
-      })
+      }))
 
       await service.checkAndNotifySpend(userId, keyId)
       expect(sendSpy).toHaveBeenCalledOnce()
@@ -434,10 +441,10 @@ describe('WebhookService', () => {
         .mockReturnValueOnce(dedupChain)
         .mockReturnValueOnce(insertChain)
 
-      const sendSpy = vi.spyOn(service, 'sendNotification').mockResolvedValue({
+      const sendSpy = mockMethod(service, 'sendNotification', () => Promise.resolve({
         id: 'log-1', webhook_config_id: 'cfg-1', event: 'spend_limit_reached',
         payload: {}, status_code: 200, response_body: 'OK', created_at: '',
-      })
+      }))
 
       await service.checkAndNotifySpend(userId, keyId)
       expect(sendSpy).toHaveBeenCalledOnce()
@@ -454,7 +461,7 @@ describe('WebhookService', () => {
       const keyChain = makeChain({ data: { spent_usd: 70, spend_limit_usd: 100, prefix: 'apx-sk-a' }, error: null })
       mockFrom.mockReturnValue(keyChain)
 
-      const sendSpy = vi.spyOn(service, 'sendNotification').mockResolvedValue(null)
+      const sendSpy = mockMethod(service, 'sendNotification', () => Promise.resolve(null))
       await service.checkAndNotifySpend(userId, keyId)
       expect(sendSpy).not.toHaveBeenCalled()
     })
@@ -467,7 +474,7 @@ describe('WebhookService', () => {
         .mockReturnValueOnce(keyChain)
         .mockReturnValueOnce(dedupChain)
 
-      const sendSpy = vi.spyOn(service, 'sendNotification').mockResolvedValue(null)
+      const sendSpy = mockMethod(service, 'sendNotification', () => Promise.resolve(null))
       await service.checkAndNotifySpend(userId, keyId)
       expect(sendSpy).not.toHaveBeenCalled()
     })
@@ -482,10 +489,10 @@ describe('WebhookService', () => {
         .mockReturnValueOnce(dedupChain)
         .mockReturnValueOnce(insertChain)
 
-      const sendSpy = vi.spyOn(service, 'sendNotification').mockResolvedValue({
+      const sendSpy = mockMethod(service, 'sendNotification', () => Promise.resolve({
         id: 'log-1', webhook_config_id: 'cfg-1', event: 'spend_warning',
         payload: {}, status_code: 200, response_body: 'OK', created_at: '',
-      })
+      }))
 
       await service.checkAndNotifySpend(userId, keyId)
 
@@ -565,7 +572,7 @@ describe('WebhookService', () => {
       const keyChain = makeChain({ data: { spent_usd: 80, spend_limit_usd: 100, prefix: 'apx-sk-a' }, error: null })
       mockFrom.mockReturnValue(keyChain)
 
-      const sendSpy = vi.spyOn(service, 'sendNotification').mockResolvedValue(null)
+      const sendSpy = mockMethod(service, 'sendNotification', () => Promise.resolve(null))
       await service.checkAndNotifySpend(userId, keyId)
       expect(sendSpy).not.toHaveBeenCalled()
     })
@@ -580,10 +587,10 @@ describe('WebhookService', () => {
         .mockReturnValueOnce(dedupChain)
         .mockReturnValueOnce(insertChain)
 
-      const sendSpy = vi.spyOn(service, 'sendNotification').mockResolvedValue({
+      const sendSpy = mockMethod(service, 'sendNotification', () => Promise.resolve({
         id: 'log-1', webhook_config_id: 'cfg-1', event: 'spend_warning',
         payload: {}, status_code: 200, response_body: 'OK', created_at: '',
-      })
+      }))
 
       await service.checkAndNotifySpend(userId, keyId)
       expect(sendSpy).toHaveBeenCalledOnce()
@@ -604,7 +611,7 @@ describe('WebhookService', () => {
         .mockReturnValueOnce(keyChain)
         .mockReturnValueOnce(quotaChain)
 
-      const sendSpy = vi.spyOn(service, 'sendNotification').mockResolvedValue(null)
+      const sendSpy = mockMethod(service, 'sendNotification', () => Promise.resolve(null))
       await service.checkAndNotifyQuota(userId, keyId)
       expect(sendSpy).not.toHaveBeenCalled()
     })
@@ -621,10 +628,10 @@ describe('WebhookService', () => {
         .mockReturnValueOnce(dedupChain)
         .mockReturnValueOnce(insertChain)
 
-      const sendSpy = vi.spyOn(service, 'sendNotification').mockResolvedValue({
+      const sendSpy = mockMethod(service, 'sendNotification', () => Promise.resolve({
         id: 'log-1', webhook_config_id: 'cfg-1', event: 'quota_warning',
         payload: {}, status_code: 200, response_body: 'OK', created_at: '',
-      })
+      }))
 
       await service.checkAndNotifyQuota(userId, keyId)
       expect(sendSpy).toHaveBeenCalledOnce()
@@ -640,7 +647,7 @@ describe('WebhookService', () => {
         .mockReturnValueOnce(keyChain)
         .mockReturnValueOnce(quotaChain)
 
-      const sendSpy = vi.spyOn(service, 'sendNotification').mockResolvedValue(null)
+      const sendSpy = mockMethod(service, 'sendNotification', () => Promise.resolve(null))
       await service.checkAndNotifyQuota(userId, keyId)
       expect(sendSpy).not.toHaveBeenCalled()
     })

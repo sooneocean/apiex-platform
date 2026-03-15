@@ -7,14 +7,14 @@ describe('MCP Server tool registration', () => {
     const connectFn = vi.fn()
 
     vi.doMock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
-      McpServer: vi.fn().mockImplementation(() => ({
-        tool: toolFn,
-        connect: connectFn,
-      })),
+      McpServer: class {
+        tool = toolFn
+        connect = connectFn
+      },
     }))
 
     vi.doMock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
-      StdioServerTransport: vi.fn(),
+      StdioServerTransport: class {},
     }))
 
     vi.doMock('../lib/config.js', () => ({

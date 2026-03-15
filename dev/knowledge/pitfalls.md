@@ -64,3 +64,10 @@
   — rate-limit-v2 (2026-03)
 - API factory 函式新增 signal 支援時，所有 consumer 必須同步更新 — 建議統一 API 函式簽名都帶 optional signal 參數
   — data-fetching-layer (2026-03)
+
+## vitest 4 升級
+
+- `vi.fn().mockImplementation(() => ({...}))` 在 vitest 4 不能被 `new` 呼叫（arrow function 非 constructor）— 需改用 `class { prop = mockFn }` 語法 mock
+  — deps-upgrade (2026-03)
+- `vi.clearAllMocks()` 不清除 `mockReturnValueOnce` 佇列（vitest 4 對齊 Jest 行為）— 若測試有未消費的 mockReturnValueOnce 值會洩漏到下一個測試。使用 `vi.resetAllMocks()` 或確保每個測試消費所有 mock 值
+  — deps-upgrade (2026-03)

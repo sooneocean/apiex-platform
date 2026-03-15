@@ -40,33 +40,33 @@ vi.mock('../../lib/supabase.js', () => ({
 
 // Mock services
 vi.mock('../../services/RouterService.js', () => ({
-  RouterService: vi.fn().mockImplementation(() => ({
-    resolveRoute: mockResolveRoute,
-    forward: mockForward,
-    getAdapter: mockGetAdapter,
-    listActiveModels: mockListActiveModels,
-  })),
+  RouterService: class {
+    resolveRoute = mockResolveRoute
+    forward = mockForward
+    getAdapter = mockGetAdapter
+    listActiveModels = mockListActiveModels
+  },
 }))
 
 vi.mock('../../services/KeyService.js', () => ({
-  KeyService: vi.fn().mockImplementation(() => ({
-    reserveQuota: mockReserveQuota,
-    settleQuota: mockSettleQuota,
-    checkSpendLimit: mockCheckSpendLimit,
-    recordSpend: mockRecordSpend,
-  })),
+  KeyService: class {
+    reserveQuota = mockReserveQuota
+    settleQuota = mockSettleQuota
+    checkSpendLimit = mockCheckSpendLimit
+    recordSpend = mockRecordSpend
+  },
 }))
 
 vi.mock('../../services/RatesService.js', () => ({
-  RatesService: vi.fn().mockImplementation(() => ({
-    getEffectiveRate: mockGetEffectiveRate,
-  })),
+  RatesService: class {
+    getEffectiveRate = mockGetEffectiveRate
+  },
 }))
 
 vi.mock('../../services/UsageLogger.js', () => ({
-  UsageLogger: vi.fn().mockImplementation(() => ({
-    logUsage: mockLogUsage,
-  })),
+  UsageLogger: class {
+    logUsage = mockLogUsage
+  },
 }))
 
 import { proxyRoutes } from '../proxy.js'

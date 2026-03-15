@@ -17,35 +17,35 @@ vi.mock('../../lib/supabase.js', () => ({
 
 // Mock adapters
 vi.mock('../../adapters/AnthropicAdapter.js', () => ({
-  AnthropicAdapter: vi.fn().mockImplementation(() => ({
-    transformRequest: vi.fn((body: unknown, model: string) => ({ mock: 'anthropic', model })),
-    transformResponse: vi.fn((res: unknown, model: string) => ({
+  AnthropicAdapter: class {
+    transformRequest = vi.fn((body: unknown, model: string) => ({ mock: 'anthropic', model }))
+    transformResponse = vi.fn((res: unknown, model: string) => ({
       id: 'chatcmpl-1',
       object: 'chat.completion',
       created: 1000,
       model,
       choices: [{ index: 0, message: { role: 'assistant', content: 'hello' }, finish_reason: 'stop' }],
       usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
-    })),
-    getHeaders: vi.fn(() => ({ 'x-api-key': 'test', 'content-type': 'application/json' })),
-    getBaseUrl: vi.fn(() => 'https://api.anthropic.com'),
-  })),
+    }))
+    getHeaders = vi.fn(() => ({ 'x-api-key': 'test', 'content-type': 'application/json' }))
+    getBaseUrl = vi.fn(() => 'https://api.anthropic.com')
+  },
 }))
 
 vi.mock('../../adapters/GeminiAdapter.js', () => ({
-  GeminiAdapter: vi.fn().mockImplementation(() => ({
-    transformRequest: vi.fn((body: unknown, model: string) => ({ mock: 'gemini', model })),
-    transformResponse: vi.fn((res: unknown, model: string) => ({
+  GeminiAdapter: class {
+    transformRequest = vi.fn((body: unknown, model: string) => ({ mock: 'gemini', model }))
+    transformResponse = vi.fn((res: unknown, model: string) => ({
       id: 'chatcmpl-2',
       object: 'chat.completion',
       created: 1000,
       model,
       choices: [{ index: 0, message: { role: 'assistant', content: 'hi' }, finish_reason: 'stop' }],
       usage: { prompt_tokens: 8, completion_tokens: 3, total_tokens: 11 },
-    })),
-    getHeaders: vi.fn(() => ({ Authorization: 'Bearer test', 'Content-Type': 'application/json' })),
-    getBaseUrl: vi.fn(() => 'https://generativelanguage.googleapis.com/v1beta/openai'),
-  })),
+    }))
+    getHeaders = vi.fn(() => ({ Authorization: 'Bearer test', 'Content-Type': 'application/json' }))
+    getBaseUrl = vi.fn(() => 'https://generativelanguage.googleapis.com/v1beta/openai')
+  },
 }))
 
 // Mock global fetch

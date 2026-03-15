@@ -2,7 +2,7 @@
   "name": "apiex-platform",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@9.15.0",
+  "packageManager": "pnpm@10.32.1",
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
@@ -12,7 +12,16 @@
     "clean": "turbo clean"
   },
   "devDependencies": {
-    "turbo": "^2.3.0",
-    "typescript": "^5.7.0"
+    "turbo": "^2.8.17",
+    "typescript": "^5.9.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@parcel/watcher",
+      "@swc/core",
+      "esbuild",
+      "protobufjs",
+      "sharp"
+    ]
   }
 }

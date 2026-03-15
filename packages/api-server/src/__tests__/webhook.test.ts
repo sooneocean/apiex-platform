@@ -26,9 +26,13 @@ const mockWebhookService = {
   listLogs: vi.fn(),
 }
 
-vi.mock('../services/WebhookService.js', () => ({
-  WebhookService: vi.fn(() => mockWebhookService),
-}))
+vi.mock('../services/WebhookService.js', () => {
+  return {
+    WebhookService: class {
+      constructor() { Object.assign(this, mockWebhookService) }
+    },
+  }
+})
 
 import { createApp } from '../index.js'
 
