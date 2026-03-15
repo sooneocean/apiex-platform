@@ -816,5 +816,33 @@ export function adminRoutes() {
     })
   })
 
+  // ---------------------------------------------------------------------------
+  // Admin Webhooks endpoints
+  // ---------------------------------------------------------------------------
+
+  /**
+   * GET /admin/webhooks — List all webhook_configs (paginated), excludes secret field
+   */
+  router.get('/webhooks', async (c) => {
+    const page = Number(c.req.query('page') ?? '1')
+    const limit = Math.min(Number(c.req.query('limit') ?? '20'), 100)
+
+    const { data, error, count } = await supabaseAdmin
+      .from('webhook_configs')
+      .select('id, user_id, url, events, is_active, created_at', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range((page - 1) * limit, page * limit - 1)
+
+    if (error) {
+      console.error('admin webhooks list error:', error)
+      return Errors.internalError()
+    }
+
+    return c.json({
+      data: data ?? [],
+      pagination: { page, limit, total: count ?? 0 },
+    })
+  })
+
   return router
 }

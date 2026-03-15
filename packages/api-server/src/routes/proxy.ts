@@ -110,14 +110,13 @@ export function proxyRoutes() {
               (usage.completion_tokens / 1000) * rate.output_rate_per_1k * 100
             )
             keyService.recordSpend(apiKeyId, costCents).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
+            // Spend notification (fire-and-forget)
+            webhookService.checkAndNotifySpend(userId, apiKeyId).catch(() => {})
           }
         }).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
 
-        // Quota warning webhook (fire-and-forget)
-        const quotaTokens = apiKeyRecord.quota_tokens as number
-        if (quotaTokens > 0) {
-          webhookService.checkAndNotifyQuota(userId, apiKeyId, quotaTokens, usage.total_tokens).catch(() => {})
-        }
+        // Quota notification (fire-and-forget)
+        webhookService.checkAndNotifyQuota(userId, apiKeyId).catch(() => {})
 
         return c.json(result.data)
       }
@@ -165,14 +164,13 @@ export function proxyRoutes() {
                 (usage.completion_tokens / 1000) * rate.output_rate_per_1k * 100
               )
               keyService.recordSpend(apiKeyId, costCents).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
+              // Spend notification (fire-and-forget)
+              webhookService.checkAndNotifySpend(userId, apiKeyId).catch(() => {})
             }
           }).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
 
-          // Quota warning webhook (fire-and-forget)
-          const quotaTokens = apiKeyRecord.quota_tokens as number
-          if (quotaTokens > 0) {
-            webhookService.checkAndNotifyQuota(userId, apiKeyId, quotaTokens, usage.total_tokens).catch(() => {})
-          }
+          // Quota notification (fire-and-forget)
+          webhookService.checkAndNotifyQuota(userId, apiKeyId).catch(() => {})
         }
       })
     } catch (err) {
