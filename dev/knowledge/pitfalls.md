@@ -26,3 +26,8 @@
 
 - Stripe Webhook 的 `amount_total` 單位是 cents（整數），前端顯示時需 /100 轉換
   — stripe-topup (2026-03)
+
+## Rate Limiting
+
+- In-memory rate limiter 重啟歸零 — 生產環境需評估 Redis 升級時機
+  — rate-limiting (2026-03)

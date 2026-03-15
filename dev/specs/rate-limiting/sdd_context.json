@@ -1,0 +1,213 @@
+{
+  "sdd_context": {
+    "version": "3.0.0",
+    "feature": "rate-limiting",
+    "current_stage": "S7",
+    "spec_mode": "full",
+    "spec_mode_reason": "涉及 middleware 攔截、DB schema、Admin API/UI 修改，複雜度中等",
+    "work_type": "new_feature",
+    "spec_folder": "dev/specs/rate-limiting",
+    "execution_mode": "autopilot",
+    "status": "completed",
+    "started_at": "2026-03-15T04:30:00+08:00",
+    "last_updated": "2026-03-15T05:00:00+08:00",
+    "last_updated_by": "architect",
+    "completed_at": null,
+    "stages": {
+      "s0": {
+        "status": "completed",
+        "agent": "requirement-analyst",
+        "started_at": "2026-03-15T04:30:00+08:00",
+        "completed_at": "2026-03-15T04:35:00+08:00",
+        "output": {
+          "brief_spec_path": "dev/specs/rate-limiting/s0_brief_spec.md",
+          "work_type": "new_feature",
+          "requirement": "為 Apiex API Proxy 加入 per-key rate limiting（RPM/TPM），超過限制回傳 429，Admin 可設定 rate limit tier",
+          "goal": "保護上游 API 免受濫用，確保多用戶公平使用",
+          "pain_points": [
+            "Proxy 無 rate limit，單一用戶可無限打上游 API",
+            "成本失控風險",
+            "多用戶公平性無保證"
+          ],
+          "success_criteria": [
+            "超過 RPM 限制時回傳 429 + retry-after header",
+            "超過 TPM 限制時回傳 429",
+            "未超過限制時正常放行 + X-RateLimit-* headers",
+            "unlimited tier 不受限",
+            "Admin 可設定用戶 rate limit tier",
+            "429 回應格式與 OpenAI 完全相容"
+          ],
+          "scope_in": [
+            "FA-RL1: Rate limit middleware（in-memory sliding window）",
+            "FA-RL1: 429 回應 + OpenAI 相容格式 + retry-after",
+            "FA-RL1: X-RateLimit-* response headers",
+            "FA-RL2: rate_limit_tiers 設定 + per-user tier",
+            "FA-RL2: PATCH /admin/users/:id/rate-limit API",
+            "FA-RL2: Admin UI tier 下拉選單"
+          ],
+          "scope_out": [
+            "分散式 rate limiting（Redis）",
+            "per-endpoint 差異化限制",
+            "自適應 rate limiting",
+            "Rate limit dashboard",
+            "Burst allowance"
+          ],
+          "constraints": [
+            "In-memory 計數器（單節點）",
+            "Streaming 的 TPM 以 max_tokens 預估",
+            "Tier 預設值：free(20RPM/100K TPM), pro(60RPM/500K TPM), unlimited(-1/-1)"
+          ],
+          "functional_areas": [
+            {
+              "id": "FA-RL1",
+              "name": "Rate Limit 檢查與攔截",
+              "description": "每次 API 請求前檢查 RPM/TPM，超過則 429",
+              "independence": "high"
+            },
+            {
+              "id": "FA-RL2",
+              "name": "Rate Limit 設定管理",
+              "description": "Admin 設定 per-user tier，定義 RPM/TPM 上限",
+              "independence": "medium"
+            }
+          ],
+          "decomposition_strategy": "single_sop_fa_labeled",
+          "child_sops": []
+        }
+      },
+      "s1": {
+        "status": "completed",
+        "agents": ["architect"],
+        "started_at": "2026-03-15T04:40:00+08:00",
+        "completed_at": "2026-03-15T05:00:00+08:00",
+        "output": {
+          "completed_phases": [1, 2],
+          "dev_spec_path": "dev/specs/rate-limiting/s1_dev_spec.md",
+          "api_spec_path": "dev/specs/rate-limiting/s1_api_spec.md",
+          "tasks": [
+            "T1:Migration 006",
+            "T2:RateLimitError class",
+            "T3:RateLimiter class",
+            "T4:rateLimitMiddleware",
+            "T5:index.ts + proxy.ts 整合",
+            "T6:Admin API rate-limit",
+            "T7:admin_list_users RPC",
+            "T8:Frontend UI",
+            "T9:Tests"
+          ],
+          "acceptance_criteria": [
+            "超過 RPM 限制時回傳 429 + retry-after header",
+            "超過 TPM 限制時回傳 429",
+            "未超過限制時正常放行 + X-RateLimit-* headers",
+            "unlimited tier 不受限",
+            "Admin 可設定用戶 rate limit tier",
+            "429 回應格式與 OpenAI 完全相容"
+          ],
+          "assumptions": [
+            "單節點部署（Fly.io 單實例）",
+            "In-memory 計數器重啟歸零可接受",
+            "Hono c.req.json() 支援重複讀取（內建 cache）"
+          ],
+          "solution_summary": "In-memory sliding window rate limiter, per-key RPM/TPM, DB-backed tier config, OpenAI-compatible 429 response",
+          "tech_debt": [
+            "未來需 Redis 支援多節點部署",
+            "無 burst allowance 機制"
+          ],
+          "regression_risks": [
+            "Proxy 請求效能（新增 middleware <1ms）",
+            "admin_list_users RPC 修改"
+          ]
+        }
+      },
+      "s2": {
+        "status": "skipped",
+        "skip_reason": "Self-authored spec by architect, S1+S3 合併執行，跳過對抗式審查",
+        "output": {}
+      },
+      "s3": {
+        "status": "completed",
+        "agent": "architect",
+        "started_at": "2026-03-15T04:50:00+08:00",
+        "completed_at": "2026-03-15T05:00:00+08:00",
+        "output": {
+          "implementation_plan_path": "dev/specs/rate-limiting/s3_implementation_plan.md",
+          "waves": [
+            {
+              "wave": 1,
+              "name": "Foundation",
+              "tasks": [
+                { "id": "T1", "name": "Migration 006", "agent": "db-expert", "dependencies": [], "complexity": "S", "parallel": true, "dod": ["rate_limit_tiers 表建立", "api_keys.rate_limit_tier 欄位新增"] },
+                { "id": "T2", "name": "RateLimitError class", "agent": "backend-expert", "dependencies": [], "complexity": "S", "parallel": true, "dod": ["RateLimitError 繼承 ApiError", "toResponse() 含 Retry-After + X-RateLimit headers"] }
+              ]
+            },
+            {
+              "wave": 2,
+              "name": "Backend Core + Integration",
+              "tasks": [
+                { "id": "T3", "name": "RateLimiter class", "agent": "backend-expert", "dependencies": ["T1"], "complexity": "M", "parallel": false, "dod": ["check/record/getConfig 方法", "sliding window 清理", "unlimited 跳過", "config cache"] },
+                { "id": "T6", "name": "Admin API", "agent": "backend-expert", "dependencies": ["T1"], "complexity": "S", "parallel": true, "dod": ["PATCH endpoint", "tier 驗證", "批次更新 keys"] },
+                { "id": "T7", "name": "admin_list_users RPC", "agent": "db-expert", "dependencies": ["T1"], "complexity": "S", "parallel": true, "dod": ["回傳 rate_limit_tier"] },
+                { "id": "T4", "name": "rateLimitMiddleware", "agent": "backend-expert", "dependencies": ["T2", "T3"], "complexity": "M", "parallel": false, "dod": ["檢查 RPM/TPM", "429 throw", "headers 附加"] },
+                { "id": "T5", "name": "index.ts + proxy.ts", "agent": "backend-expert", "dependencies": ["T4"], "complexity": "S", "parallel": false, "dod": ["middleware chain", "record() 呼叫"] }
+              ]
+            },
+            {
+              "wave": 3,
+              "name": "Frontend + Tests",
+              "tasks": [
+                { "id": "T8", "name": "Frontend UI", "agent": "frontend-expert", "dependencies": ["T6", "T7"], "complexity": "M", "parallel": true, "dod": ["AdminUser.rate_limit_tier", "TierSelector", "UserTable 整合"] },
+                { "id": "T9", "name": "Tests", "agent": "backend-expert", "dependencies": ["T5", "T6"], "complexity": "M", "parallel": true, "dod": ["RateLimiter 單元測試", "middleware 測試", "admin API 測試"] }
+              ]
+            }
+          ],
+          "total_tasks": 9,
+          "estimated_waves": 3,
+          "verification": {
+            "static_analysis": ["npx tsc --noEmit", "npx next build"],
+            "unit_tests": ["npx vitest run"]
+          }
+        }
+      },
+      "s4": {
+        "status": "completed",
+        "started_at": "2026-03-15T05:00:00+08:00",
+        "completed_at": "2026-03-15T05:30:00+08:00",
+        "output": {
+          "completed_tasks": ["T1","T2","T3","T4","T5","T6","T7","T8","T9"],
+          "waves_completed": 3,
+          "build_status": { "api_server_tests": "106/106 passed", "test_files": 15 }
+        }
+      },
+      "s5": {
+        "status": "completed",
+        "started_at": "2026-03-15T05:30:00+08:00",
+        "completed_at": "2026-03-15T05:35:00+08:00",
+        "output": { "conclusion": "pass", "short_circuit": true, "issues": { "p0": 0, "p1": 0, "p2": 0 } }
+      },
+      "s6": {
+        "status": "completed",
+        "started_at": "2026-03-15T05:35:00+08:00",
+        "completed_at": "2026-03-15T05:40:00+08:00",
+        "output": { "automated_tests": { "total": 106, "passed": 106, "failed": 0 }, "recommendation": "proceed_to_s7" }
+      },
+      "s7": {
+        "status": "completed",
+        "started_at": "2026-03-15T05:40:00+08:00",
+        "completed_at": "2026-03-15T05:45:00+08:00",
+        "output": {
+          "lessons_learned": {
+            "what_went_well": [
+              "S1+S3 合併執行大幅加速規劃階段",
+              "RateLimiter sliding window 設計簡潔且 9 測試一次通過",
+              "apiKeyAuth 的 select(*) 自動帶入新欄位，零成本取得 tier"
+            ],
+            "what_went_wrong": [],
+            "new_pitfalls": [
+              "In-memory rate limiter 重啟歸零 — 生產環境需評估 Redis 升級時機"
+            ]
+          }
+        }
+      }
+    }
+  }
+}
