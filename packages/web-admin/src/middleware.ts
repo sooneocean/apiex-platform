@@ -38,6 +38,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/admin/login', request.url))
   }
 
+  // Redirect unauthenticated portal users to login
+  if (!user && pathname.startsWith('/portal')) {
+    return NextResponse.redirect(new URL('/admin/login', request.url))
+  }
+
   // Redirect authenticated users away from login
   if (user && pathname === '/admin/login') {
     return NextResponse.redirect(new URL('/admin/dashboard', request.url))
@@ -47,5 +52,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/admin/:path*'],
+  matcher: ['/admin/:path*', '/portal/:path*'],
 }

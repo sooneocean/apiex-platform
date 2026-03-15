@@ -90,6 +90,37 @@ export function adminRoutes() {
   })
 
   /**
+   * GET /admin/topup-logs — Query topup logs with optional user filter
+   */
+  router.get('/topup-logs', async (c) => {
+    const page = Number(c.req.query('page') ?? '1')
+    const limit = Math.min(Number(c.req.query('limit') ?? '50'), 200)
+    const userId = c.req.query('user_id')
+
+    let query = supabaseAdmin
+      .from('topup_logs')
+      .select('*', { count: 'exact' })
+
+    if (userId) {
+      query = query.eq('user_id', userId)
+    }
+
+    const { data, error, count } = await query
+      .order('created_at', { ascending: false })
+      .range((page - 1) * limit, page * limit - 1)
+
+    if (error) {
+      console.error('topup-logs query error:', error)
+      return Errors.internalError()
+    }
+
+    return c.json({
+      data: data ?? [],
+      pagination: { page, limit, total: count ?? 0 },
+    })
+  })
+
+  /**
    * GET /admin/usage-logs — Query usage logs with filters
    */
   router.get('/usage-logs', async (c) => {

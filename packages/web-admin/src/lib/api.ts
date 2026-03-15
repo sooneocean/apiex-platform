@@ -69,6 +69,40 @@ export interface CreateKeyResponse {
   warning: string;
 }
 
+export interface TopupLog {
+  id: string;
+  amount_usd: number;
+  tokens_granted: number;
+  status: string;
+  created_at: string;
+}
+
+export interface AdminTopupLog extends TopupLog {
+  user_id: string;
+  user_email?: string;
+  stripe_session_id: string;
+}
+
+export interface CheckoutResponse {
+  data: {
+    checkout_url: string;
+    session_id: string;
+  };
+}
+
+export interface TopupStatusResponse {
+  data: {
+    status: 'pending' | 'completed';
+    tokens_granted: number | null;
+    completed_at: string | null;
+  };
+}
+
+export interface TopupLogsResponse {
+  data: TopupLog[];
+  pagination: Pagination;
+}
+
 // ─── Base fetch helpers ───────────────────────────────────────────────────────
 
 async function handleResponse<T>(res: Response): Promise<T> {
@@ -147,6 +181,25 @@ export function makeAdminApi(token: string) {
       const qs = params.toString();
       return apiGet<PaginatedLogs>(`/admin/usage-logs${qs ? `?${qs}` : ""}`, token);
     },
+    getTopupLogs: (query: { page?: number; limit?: number; user_id?: string } = {}) => {
+      const params = new URLSearchParams();
+      if (query.page !== undefined) params.set("page", String(query.page));
+      if (query.limit !== undefined) params.set("limit", String(query.limit));
+      if (query.user_id) params.set("user_id", query.user_id);
+      const qs = params.toString();
+      return apiGet<{ data: AdminTopupLog[]; pagination: Pagination }>(`/admin/topup-logs${qs ? `?${qs}` : ""}`, token);
+    },
+  };
+}
+
+export function makeTopupApi(token: string) {
+  return {
+    checkout: (planId: string) =>
+      apiPost<CheckoutResponse>('/topup/checkout', { plan_id: planId }, token),
+    getStatus: (sessionId: string) =>
+      apiGet<TopupStatusResponse>(`/topup/status?session_id=${sessionId}`, token),
+    getLogs: (page = 1, limit = 20) =>
+      apiGet<TopupLogsResponse>(`/topup/logs?page=${page}&limit=${limit}`, token),
   };
 }
 
