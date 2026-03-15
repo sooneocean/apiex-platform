@@ -1,5 +1,5 @@
 /**
- * T10 TDD — Auth Route 測試
+ * T10 TDD — Auth Route 測試 (包含 GET /me)
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { Hono } from 'hono'
@@ -15,6 +15,11 @@ vi.mock('@supabase/supabase-js', () => ({
       signInWithPassword: (...args: unknown[]) => mockSignInWithPassword(...args),
     },
   })),
+}))
+
+// Mock isAdmin lib
+vi.mock('../../lib/isAdmin.js', () => ({
+  isAdminEmail: vi.fn((email: string) => email === 'admin@example.com'),
 }))
 
 vi.mock('../../lib/supabase.js', () => ({
@@ -87,6 +92,74 @@ describe('Auth Route — T10', () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
+      })
+
+      expect(res.status).toBe(401)
+    })
+  })
+
+  describe('GET /auth/me', () => {
+    it('should return user info with isAdmin=true for admin email', async () => {
+      mockGetUser.mockResolvedValue({
+        data: {
+          user: {
+            id: 'admin-uuid',
+            email: 'admin@example.com',
+          },
+        },
+        error: null,
+      })
+
+      const res = await app.request('/auth/me', {
+        method: 'GET',
+        headers: { Authorization: 'Bearer valid-admin-token' },
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json() as { data: { id: string; email: string; isAdmin: boolean } }
+      expect(body.data.id).toBe('admin-uuid')
+      expect(body.data.email).toBe('admin@example.com')
+      expect(body.data.isAdmin).toBe(true)
+    })
+
+    it('should return user info with isAdmin=false for non-admin email', async () => {
+      mockGetUser.mockResolvedValue({
+        data: {
+          user: {
+            id: 'user-uuid',
+            email: 'user@example.com',
+          },
+        },
+        error: null,
+      })
+
+      const res = await app.request('/auth/me', {
+        method: 'GET',
+        headers: { Authorization: 'Bearer valid-user-token' },
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json() as { data: { id: string; email: string; isAdmin: boolean } }
+      expect(body.data.isAdmin).toBe(false)
+    })
+
+    it('should return 401 without Authorization header', async () => {
+      const res = await app.request('/auth/me', {
+        method: 'GET',
+      })
+
+      expect(res.status).toBe(401)
+    })
+
+    it('should return 401 with invalid token', async () => {
+      mockGetUser.mockResolvedValue({
+        data: { user: null },
+        error: { message: 'invalid token' },
+      })
+
+      const res = await app.request('/auth/me', {
+        method: 'GET',
+        headers: { Authorization: 'Bearer bad-token' },
       })
 
       expect(res.status).toBe(401)

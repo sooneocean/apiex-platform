@@ -115,6 +115,24 @@ export interface TopupLog {
   created_at: string
 }
 
+export interface ModelRate {
+  id: string
+  model_tag: string
+  input_rate_per_1k: number
+  output_rate_per_1k: number
+  effective_from: string
+  created_at: string
+}
+
+export interface ModelRateInsert {
+  model_tag: string
+  input_rate_per_1k: number
+  output_rate_per_1k: number
+  effective_from?: string
+}
+
+export type ModelRateUpdate = Partial<ModelRateInsert>
+
 export interface TopupLogInsert {
   user_id: string
   stripe_session_id: string
@@ -158,6 +176,11 @@ export interface Database {
         Row: RouteConfig;
         Insert: RouteConfigInsert;
         Update: RouteConfigUpdate;
+      };
+      model_rates: {
+        Row: ModelRate;
+        Insert: ModelRateInsert;
+        Update: ModelRateUpdate;
       };
     };
   };
