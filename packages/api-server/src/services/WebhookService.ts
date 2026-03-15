@@ -289,9 +289,13 @@ export class WebhookService {
    * @internal 暴露給測試使用
    */
   async _recordNotification(eventType: string, keyId: string, userId: string): Promise<void> {
-    await supabaseAdmin
+    const { error } = await supabaseAdmin
       .from('notification_logs')
       .insert({ event_type: eventType, key_id: keyId, user_id: userId })
+
+    if (error) {
+      console.error('[WebhookService] Failed to record notification_logs:', error)
+    }
   }
 
   /**

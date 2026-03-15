@@ -1,0 +1,34 @@
+{
+  "sdd_context": {
+    "version": "3.0.0",
+    "feature": "webhook-p1-fix",
+    "feature_name": "Webhook P1 修復（時序 + error logging + 清理 + 測試覆蓋）",
+    "current_stage": "S4",
+    "spec_mode": "quick",
+    "work_type": "bugfix",
+    "spec_folder": "dev/specs/webhook-p1-fix",
+    "execution_mode": "autopilot",
+    "status": "in_progress",
+    "started_at": "2026-03-15T15:00:00+08:00",
+    "last_updated": "2026-03-15T15:00:00+08:00",
+    "last_updated_by": "orchestrator",
+    "stages": {
+      "s0": {
+        "status": "completed",
+        "output": {
+          "work_type": "bugfix",
+          "requirement": "修復 cross-validate 剩餘 7 個 P1 問題",
+          "success_criteria": [
+            "SC-1: checkAndNotifySpend 在 recordSpend 完成後才觸發",
+            "SC-2: _recordNotification insert 錯誤有 console.error",
+            "SC-3: notification_logs 有清理 SQL/migration",
+            "SC-4: proxy.ts webhook 觸發有測試覆蓋",
+            "SC-5: GET /admin/webhooks 有測試覆蓋",
+            "SC-6: sendNotification 事件過濾有測試",
+            "SC-7: exactly 80% spend 和 20% quota 邊界有測試"
+          ]
+        }
+      }
+    }
+  }
+}

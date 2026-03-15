@@ -192,9 +192,9 @@ export function proxyRoutes() {
                 (usage.prompt_tokens / 1000) * rate.input_rate_per_1k * 100 +
                 (usage.completion_tokens / 1000) * rate.output_rate_per_1k * 100
               )
-              keyService.recordSpend(apiKeyId, costCents).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
-              // Spend notification (fire-and-forget)
-              webhookService.checkAndNotifySpend(userId, apiKeyId).catch((err) => console.error('[proxy] webhook notification failed:', err))
+              keyService.recordSpend(apiKeyId, costCents)
+                .then(() => webhookService.checkAndNotifySpend(userId, apiKeyId).catch((err) => console.error('[proxy] webhook notification failed:', err)))
+                .catch((err) => console.error('[proxy] fire-and-forget failed:', err))
             }
           }).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
 

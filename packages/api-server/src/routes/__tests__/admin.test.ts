@@ -32,6 +32,7 @@ function makeSupabaseChain(resolvedValue: unknown) {
     eq: vi.fn(),
     insert: vi.fn(),
     update: vi.fn(),
+    range: vi.fn(),
   }
   // Make every chainable method return terminal so any chain works
   Object.keys(terminal).forEach((k) => {
@@ -39,6 +40,8 @@ function makeSupabaseChain(resolvedValue: unknown) {
       (terminal as Record<string, unknown>)[k] = vi.fn().mockReturnValue(terminal)
     }
   })
+  // Make the chain thenable (for queries that don't end with .single())
+  ;(terminal as { then: unknown }).then = (resolve: (v: unknown) => unknown) => Promise.resolve(resolvedValue).then(resolve)
   return terminal
 }
 
@@ -877,6 +880,50 @@ describe('Admin Spend Endpoints — T6', () => {
 
       expect(res.status).toBe(404)
       expect(mockResetSpend).not.toHaveBeenCalled()
+    })
+  })
+
+  // ── GET /admin/webhooks（TC-012）────────────────────────────────────────
+
+  describe('GET /admin/webhooks', () => {
+    it('should return paginated webhook configs without secret', async () => {
+      const webhooks = [
+        { id: 'wh-1', user_id: 'u-1', url: 'https://a.com/hook', events: ['quota_warning'], is_active: true, created_at: '2026-03-15T00:00:00Z' },
+        { id: 'wh-2', user_id: 'u-2', url: 'https://b.com/hook', events: ['spend_warning'], is_active: false, created_at: '2026-03-14T00:00:00Z' },
+      ]
+      const chain = makeSupabaseChain({ data: webhooks, error: null, count: 2 })
+      mockFrom.mockReturnValueOnce(chain)
+
+      const res = await app.request('/admin/webhooks')
+      expect(res.status).toBe(200)
+
+      const body = await res.json()
+      expect(body.data).toHaveLength(2)
+      expect(body.pagination).toBeDefined()
+      expect(body.pagination.page).toBe(1)
+      for (const wh of body.data) {
+        expect(wh).not.toHaveProperty('secret')
+      }
+    })
+
+    it('should support page and limit params', async () => {
+      const chain = makeSupabaseChain({ data: [], error: null, count: 0 })
+      mockFrom.mockReturnValueOnce(chain)
+
+      const res = await app.request('/admin/webhooks?page=2&limit=10')
+      expect(res.status).toBe(200)
+
+      const body = await res.json()
+      expect(body.pagination.page).toBe(2)
+      expect(body.pagination.limit).toBe(10)
+    })
+
+    it('should return 500 on DB error', async () => {
+      const chain = makeSupabaseChain({ data: null, error: { message: 'db error' }, count: null })
+      mockFrom.mockReturnValueOnce(chain)
+
+      const res = await app.request('/admin/webhooks')
+      expect(res.status).toBe(500)
     })
   })
 })
