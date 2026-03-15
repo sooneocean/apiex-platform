@@ -1,0 +1,213 @@
+{
+  "sdd_context": {
+    "version": "3.0.0",
+    "feature": "rate-limit-v2",
+    "feature_name": "Rate Limiting v2（Redis + 模型級限流 + Admin UI）",
+    "current_stage": "S4",
+    "spec_mode": "full",
+    "spec_mode_reason": "重構現有架構 + 新增 DB 表 + 新增 Admin UI，需完整 spec 指導",
+    "work_type": "refactor",
+    "spec_folder": "dev/specs/rate-limit-v2",
+    "execution_mode": "autopilot",
+    "status": "in_progress",
+    "started_at": "2026-03-15T14:00:00+08:00",
+    "last_updated": "2026-03-15T15:30:00+08:00",
+    "last_updated_by": "architect",
+    "stages": {
+      "s0": {
+        "status": "completed",
+        "agent": "requirement-analyst",
+        "started_at": "2026-03-15T14:00:00+08:00",
+        "completed_at": "2026-03-15T14:15:00+08:00",
+        "output": {
+          "brief_spec_path": "dev/specs/rate-limit-v2/s0_brief_spec.md",
+          "work_type": "refactor",
+          "requirement": "將 Rate Limiter 遷移至 Redis + 新增模型級限流 + Admin UI 管理 tier",
+          "goal": "多程序正確限流 + 模型級細粒度 + Admin UI 管理",
+          "pain_points": [
+            "多程序失效（記憶體計數器各自獨立）",
+            "無分佈式鎖（並發 race condition）",
+            "粒度不足（所有模型共用配額）",
+            "管理不透明（無 Admin UI）"
+          ],
+          "success_criteria": [
+            "SC-1: REDIS_URL 設定時計數器走 Redis",
+            "SC-2: REDIS_URL 未設定時自動降級記憶體版",
+            "SC-3: Redis 連線中斷時降級 + warn",
+            "SC-4: 現有 9 個 RateLimiter 測試全部通過",
+            "SC-5: 有 model override 時使用 model-specific RPM/TPM",
+            "SC-6: 無 model override 時 fallback 到 tier 預設值",
+            "SC-7: model_rate_overrides 表支援 CRUD",
+            "SC-8: Admin UI 可 CRUD tier",
+            "SC-9: Admin UI 可管理 model override",
+            "SC-10: Admin UI 可指派用戶 tier",
+            "SC-11: Rate limit 檢查延遲 < 5ms"
+          ],
+          "scope_in": [
+            "FA-A: RateLimiter 遷移至 Redis（@upstash/redis）",
+            "FA-A: Redis 不可用時自動降級記憶體版",
+            "FA-A: Redis key 設計 + TTL 管理",
+            "FA-B: model_rate_overrides 表 + migration",
+            "FA-B: RateLimiter 支援 per-model RPM/TPM",
+            "FA-B: rateLimitMiddleware 傳入 model 參數",
+            "FA-C: Admin Rate Limits 頁面（Tier CRUD + Model Override CRUD）",
+            "FA-C: Admin 用戶 Tier 指派 UI",
+            "FA-C: Sidebar 導航新增"
+          ],
+          "scope_out": [
+            "IP 級限流",
+            "端點級限流",
+            "監控面板 / Prometheus",
+            "Rate limit 事件 Webhook 通知",
+            "自訂滑動窗口大小",
+            "Redis Cluster / Sentinel"
+          ],
+          "constraints": [
+            "Upstash Redis REST API",
+            "@upstash/redis 新增依賴",
+            "記憶體版保留為 fallback",
+            "Next.js App Router + Tailwind CSS"
+          ],
+          "functional_areas": [
+            { "id": "FA-A", "name": "Redis 後端遷移", "description": "RateLimiter 從記憶體改用 Redis + fallback", "independence": "high" },
+            { "id": "FA-B", "name": "模型級限流", "description": "per-model RPM/TPM override", "independence": "medium" },
+            { "id": "FA-C", "name": "Admin Rate Limit UI", "description": "Tier CRUD + Model Override + 用戶指派", "independence": "high" }
+          ],
+          "decomposition_strategy": "single_sop_fa_labeled",
+          "child_sops": []
+        }
+      },
+      "s1": {
+        "status": "completed",
+        "agents": ["codebase-explorer", "architect"],
+        "started_at": "2026-03-15T14:15:00+08:00",
+        "completed_at": "2026-03-15T15:00:00+08:00",
+        "output": {
+          "completed_phases": [1, 2],
+          "dev_spec_path": "dev/specs/rate-limit-v2/s1_dev_spec.md",
+          "api_spec_path": "dev/specs/rate-limit-v2/s1_api_spec.md",
+          "solution_summary": "引入 CounterBackend interface 抽象計數器儲存，實作 RedisCounterBackend（@upstash/redis Sorted Set sliding window）和 MemoryCounterBackend（現有邏輯封裝）。環境變數決定啟動時 backend 選擇，Redis 操作失敗時 per-call 降級。新增 model_rate_overrides 表支援 per-model RPM/TPM 覆寫。新增 8 個 Admin API 端點 + 前端管理頁面。",
+          "tasks": [
+            { "id": "T1", "name": "model_rate_overrides DB Migration", "fa": "FA-B", "type": "database", "complexity": "S", "agent": "backend-developer", "dependencies": [] },
+            { "id": "T2", "name": "RateLimiter 核心重構 (CounterBackend + Redis + Memory + fallback)", "fa": "FA-A", "type": "backend", "complexity": "L", "agent": "backend-developer", "dependencies": [] },
+            { "id": "T3", "name": "模型級限流整合 (middleware + proxy + model override)", "fa": "FA-B", "type": "backend", "complexity": "M", "agent": "backend-developer", "dependencies": ["T1", "T2"] },
+            { "id": "T4", "name": "Admin API (Tier CRUD + Model Override CRUD)", "fa": "FA-C", "type": "backend", "complexity": "M", "agent": "backend-developer", "dependencies": ["T1"] },
+            { "id": "T5", "name": "前端 (API client + Admin UI + Sidebar + i18n)", "fa": "FA-C", "type": "frontend", "complexity": "M", "agent": "frontend-developer", "dependencies": ["T4"] },
+            { "id": "T6", "name": "測試擴展 (RateLimiter + middleware)", "fa": "FA-A/B", "type": "backend", "complexity": "M", "agent": "backend-developer", "dependencies": ["T2", "T3"] }
+          ],
+          "acceptance_criteria": [
+            "AC-1 (SC-1): UPSTASH_REDIS_REST_URL 設定時計數器走 Redis Sorted Set",
+            "AC-2 (SC-2): UPSTASH_REDIS_REST_URL 未設定時自動使用 MemoryCounterBackend",
+            "AC-3 (SC-3): Redis 連線中斷時 console.warn + 降級至 Memory",
+            "AC-4 (SC-4): 現有 9 個 RateLimiter 測試全部通過",
+            "AC-5 (SC-5): 有 model override 時使用 model-specific RPM/TPM",
+            "AC-6 (SC-6): 無 model override 時 fallback 到 tier 預設值",
+            "AC-7 (SC-7): model_rate_overrides 表 CRUD 正常運作",
+            "AC-8 (SC-8): Admin UI 可 CRUD tier",
+            "AC-9 (SC-9): Admin UI 可管理 model override",
+            "AC-10 (SC-10): Admin UI 可指派用戶 tier",
+            "AC-11 (SC-11): Rate limit 檢查延遲 < 5ms（pipeline 壓縮 RTT）"
+          ],
+          "assumptions": [
+            "使用 @upstash/redis（非 ioredis），環境變數為 UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN",
+            "model_rate_overrides 使用 id UUID 作為 PK，(tier, model_tag) UNIQUE 約束",
+            "model_tag 精確匹配（不支援 wildcard），未來可擴展",
+            "rate_limit_tiers 所有 tier 均可刪除（包含 free），只要無用戶引用",
+            "Admin UI 的 Rate Limits 頁面不需分頁（tier/override 數量預期少）"
+          ],
+          "tech_debt": [
+            "現有 RateLimiter 使用 in-process Map，遷移後保留為 MemoryCounterBackend fallback",
+            "configCache 維持記憶體 Map，tier 更新有 1 分鐘延遲",
+            "admin_list_users RPC 使用 MAX(rate_limit_tier) 語意不精確（本次不修）"
+          ],
+          "regression_risks": [
+            "check() 簽名新增 model 可選參數 — rateLimitMiddleware 需同步更新",
+            "record() 簽名新增 model 可選參數 — proxy.ts 2 處需同步更新",
+            "CounterBackend 抽象引入 — 現有 9 個測試需適配新 constructor",
+            "Redis fallback 路徑 — 需專項測試覆蓋"
+          ],
+          "impact_scope": {
+            "backend": [
+              "packages/api-server/src/lib/RateLimiter.ts（修改 — Redis 後端 + fallback 策略）",
+              "packages/api-server/src/middleware/rateLimitMiddleware.ts（修改 — 傳入 model 參數）",
+              "packages/api-server/src/routes/admin.ts（修改 — Tier CRUD + Model Override CRUD）",
+              "packages/api-server/src/lib/__tests__/RateLimiter.test.ts（修改 — 9 個現有測試 + 新增 Redis/fallback 測試）",
+              "packages/api-server/src/middleware/__tests__/rateLimitMiddleware.test.ts（修改 — model 參數測試）",
+              "packages/api-server/package.json（修改 — 新增 @upstash/redis 依賴）"
+            ],
+            "frontend": [
+              "packages/web-admin/src/lib/api.ts（修改 — 新增 RateLimitTier/ModelOverride 型別與 API factory）",
+              "packages/web-admin/src/components/AppLayout.tsx（修改 — Sidebar 新增 Rate Limits 導航項目）",
+              "packages/web-admin/src/app/admin/(protected)/settings/rate-limits/page.tsx（新增 — Tier CRUD + Model Override CRUD）",
+              "packages/web-admin/messages/zh-TW.json（修改 — 新增 rateLimits i18n key）",
+              "packages/web-admin/messages/en.json（修改 — 新增 rateLimits i18n key）"
+            ],
+            "database": [
+              "supabase/migrations/011_model_rate_overrides.sql（新增 — model_rate_overrides 表）"
+            ]
+          },
+          "risks": [
+            {
+              "risk": "@upstash/redis 套件尚未安裝",
+              "level": "medium",
+              "mitigation": "pnpm add @upstash/redis --filter @apiex/api-server"
+            },
+            {
+              "risk": "Upstash REST API 延遲可能超 5ms（SC-11）",
+              "level": "high",
+              "mitigation": "使用 pipeline 批次操作壓到 1 RTT；部署在與 Upstash 同地區"
+            },
+            {
+              "risk": "Redis mock 實作錯誤導致假通過",
+              "level": "medium",
+              "mitigation": "mock 精確到 ZADD/ZREMRANGEBYSCORE 語義，review 重點檢查"
+            }
+          ]
+        }
+      },
+      "s2": {
+        "status": "skipped",
+        "output": { "reason": "Autopilot 模式，architect 已內部審查" }
+      },
+      "s3": {
+        "status": "completed",
+        "agent": "architect",
+        "started_at": "2026-03-15T15:00:00+08:00",
+        "completed_at": "2026-03-15T15:30:00+08:00",
+        "output": {
+          "implementation_plan_path": "dev/specs/rate-limit-v2/s3_implementation_plan.md",
+          "waves": [
+            {
+              "wave": 1, "name": "基礎",
+              "tasks": [
+                { "id": "T1", "name": "model_rate_overrides DB Migration", "agent": "backend-developer", "dependencies": [], "complexity": "S", "parallel": true },
+                { "id": "T2", "name": "RateLimiter 核心重構", "agent": "backend-developer", "dependencies": [], "complexity": "L", "parallel": true }
+              ]
+            },
+            {
+              "wave": 2, "name": "整合",
+              "tasks": [
+                { "id": "T3", "name": "模型級限流整合", "agent": "backend-developer", "dependencies": ["T1", "T2"], "complexity": "M", "parallel": true },
+                { "id": "T4", "name": "Admin API", "agent": "backend-developer", "dependencies": ["T1"], "complexity": "M", "parallel": true }
+              ]
+            },
+            {
+              "wave": 3, "name": "前端 + 測試",
+              "tasks": [
+                { "id": "T5", "name": "前端 UI", "agent": "frontend-developer", "dependencies": ["T4"], "complexity": "M", "parallel": true },
+                { "id": "T6", "name": "測試擴展", "agent": "backend-developer", "dependencies": ["T2", "T3"], "complexity": "M", "parallel": true }
+              ]
+            }
+          ],
+          "total_tasks": 6,
+          "estimated_waves": 3,
+          "verification": {
+            "static_analysis": ["npx tsc --noEmit"],
+            "unit_tests": ["pnpm --filter @apiex/api-server test"],
+            "build": ["cd packages/web-admin && pnpm build"]
+          }
+        }
+      }
+    }
+  }
+}
