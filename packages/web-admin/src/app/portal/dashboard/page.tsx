@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import { RefreshCw, AlertCircle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import {
@@ -19,9 +20,18 @@ import PeriodSelector from '@/components/analytics/PeriodSelector'
 import KeySelector from '@/components/analytics/KeySelector'
 import EmptyState from '@/components/analytics/EmptyState'
 import LoadingSkeleton from '@/components/analytics/LoadingSkeleton'
-import TimeseriesAreaChart from '@/components/charts/TimeseriesAreaChart'
-import LatencyLineChart from '@/components/charts/LatencyLineChart'
-import DonutChart from '@/components/charts/DonutChart'
+const TimeseriesAreaChart = dynamic(
+  () => import('@/components/charts/TimeseriesAreaChart'),
+  { loading: () => <LoadingSkeleton variant="chart" />, ssr: false }
+)
+const LatencyLineChart = dynamic(
+  () => import('@/components/charts/LatencyLineChart'),
+  { loading: () => <LoadingSkeleton variant="chart" />, ssr: false }
+)
+const DonutChart = dynamic(
+  () => import('@/components/charts/DonutChart'),
+  { loading: () => <LoadingSkeleton variant="chart" />, ssr: false }
+)
 
 function SectionCard({
   title,
@@ -161,7 +171,7 @@ export default function PortalDashboardPage() {
   const totalTokens = timeseries?.totals.total_tokens ?? 0
 
   // 計算平均延遲（取所有 model 最新時間點的 p50 平均）
-  const avgLatency = (() => {
+  const avgLatency = useMemo(() => {
     if (!latency?.series.length) return null
     const last = latency.series[latency.series.length - 1]
     const vals = Object.keys(last)
@@ -175,7 +185,7 @@ export default function PortalDashboardPage() {
       .filter((v): v is number => v !== null)
     if (!vals.length) return null
     return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length)
-  })()
+  }, [latency])
 
   return (
     <div className="space-y-6">

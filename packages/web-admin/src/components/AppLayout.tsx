@@ -1,5 +1,6 @@
 'use client'
 
+import { useMemo } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
@@ -15,7 +16,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const router = useRouter()
   const pathname = usePathname()
 
-  const navItems = [
+  const navItems = useMemo(() => [
     { href: '/admin/dashboard', label: t('dashboard') },
     { href: '/admin/analytics', label: t('analytics') },
     { href: '/admin/logs', label: t('logs') },
@@ -26,7 +27,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
     { href: '/admin/settings/routes', label: t('settingsRoutes') },
     { href: '/admin/settings/webhooks', label: t('settingsWebhooks') },
     { href: '/admin/settings/rate-limits', label: t('settingsRateLimits') },
-  ]
+  ], [t])
 
   async function handleLogout() {
     await supabase.auth.signOut()

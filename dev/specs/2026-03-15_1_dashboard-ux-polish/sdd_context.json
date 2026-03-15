@@ -1,0 +1,384 @@
+{
+  "sdd_context": {
+    "version": "3.0.0",
+    "feature": "dashboard-ux-polish",
+    "current_stage": "S7_DONE",
+    "spec_mode": "quick",
+    "spec_mode_reason": "純前端 UX 改善，無 DB/API 變更，6 個獨立小任務，影響範圍明確且有限",
+    "work_type": "enhancement",
+    "spec_folder": "dev/specs/2026-03-15_1_dashboard-ux-polish",
+    "execution_mode": "autopilot",
+    "status": "completed",
+    "completed_at": "2026-03-15T09:00:00Z",
+    "started_at": "2026-03-15T00:00:00Z",
+    "last_updated": "2026-03-15T07:00:00Z",
+    "last_updated_by": "architect",
+    "stages": {
+      "s0": {
+        "status": "completed",
+        "agent": "requirement-analyst",
+        "started_at": "2026-03-15T00:00:00Z",
+        "completed_at": "2026-03-15T00:00:00Z",
+        "output": {
+          "work_type": "refactor",
+          "requirement": "改善 Admin Dashboard 與 Portal Dashboard 的前端 UX：加入骨架屏取代純文字 loading、Logs 搜尋加 debounce、useMemo 優化、Recharts 圖表改用動態載入",
+          "goal": "提升前端互動體驗，消除視覺閃爍與不必要的 API 觸發，降低主要元件的重新渲染成本",
+          "success_criteria": [
+            "SC-1: Admin Dashboard 載入時顯示骨架屏而非純文字 'Loading...'",
+            "SC-2: Logs 搜尋輸入有 300ms debounce，不會每個字元觸發 API",
+            "SC-3: Logs 表格載入時顯示行級骨架",
+            "SC-4: AppLayout navItems 用 useMemo 包裝",
+            "SC-5: Portal Dashboard avgLatency 用 useMemo 包裝",
+            "SC-6: Recharts 圖表元件用 dynamic() 動態載入，附帶 loading skeleton"
+          ],
+          "pain_points": [
+            "Admin Dashboard 載入期間只顯示純文字，體驗差",
+            "Logs 搜尋每個字元都觸發 API，造成不必要的請求",
+            "Recharts 圖表同步載入增加初始 bundle size",
+            "navItems 與 avgLatency 每次 render 重新計算，浪費效能"
+          ],
+          "scope_in": [
+            "Admin Dashboard 加 LoadingSkeleton（取代純文字 'Loading...'）",
+            "Logs 搜尋加 debounce 300ms",
+            "Logs 表格加行級骨架",
+            "AppLayout navItems useMemo",
+            "Portal Dashboard avgLatency useMemo",
+            "Recharts 圖表元件改用 next/dynamic 動態載入"
+          ],
+          "scope_out": [
+            "SSR 遷移（已評估 ROI 不划算）",
+            "React Query/SWR 引入（列為第二個 SOP）",
+            "新功能開發",
+            "後端 API 修改",
+            "資料庫變更"
+          ],
+          "constraints": [
+            "使用現有 LoadingSkeleton 元件（已有 variant='cards'/'chart'/'table'）",
+            "不引入新依賴",
+            "不改變現有 API 呼叫模式"
+          ]
+        }
+      },
+      "s1": {
+        "status": "completed",
+        "agents": ["codebase-explorer", "architect"],
+        "started_at": "2026-03-15T06:00:00Z",
+        "completed_at": "2026-03-15T07:00:00Z",
+        "output": {
+          "completed_phases": [1, 2],
+          "solution_summary": "6 個獨立前端改動，全部並行可執行。核心決策：SC-6 在 page 層做 dynamic import（ssr:false）；SC-3 骨架在 page 層條件渲染避免雙層 border；SC-2 保留套用按鈕 + debouncedFilter state 分離；SC-1 各區塊獨立顯示對應 skeleton variant。",
+          "tech_decisions": {
+            "R1_sc6_dynamic_location": "在 page 層做 dynamic import，不建立 wrapper 元件。ssr: false 避免 Recharts DOM API 問題。loading fallback 統一用 LoadingSkeleton variant='chart'。",
+            "R2_sc3_double_border": "骨架在 logs/page.tsx 的 page 層條件渲染：loading 時直接顯示 LoadingSkeleton（不包外層 border div），非 loading 時顯示 border div + UsageLogsTable。UsageLogsTable.tsx 不需修改。",
+            "R3_sc2_debounce_with_button": "新增 debouncedFilter state + debounceRef。onChange 更新 modelTagFilter 並啟動 300ms timer 更新 debouncedFilter；套用按鈕立即同步；清除按鈕同時清空兩個 state 並 cancel timer。fetchLogs 依賴 debouncedFilter。",
+            "U1_sc1_two_loading_states": "usersLoading 和 keysLoading 各自獨立顯示骨架。users 區塊：loading 時直接用 LoadingSkeleton variant='table'（不包外層 border div）；keys 區塊：loading 時用 LoadingSkeleton variant='cards'。",
+            "U2_sc6_fallback_size": "統一用 LoadingSkeleton variant='chart'，不客製化尺寸。現有 h-52 接近實際圖表高度，可接受。"
+          },
+          "tasks": [
+            {
+              "id": "T1",
+              "sc": "SC-4",
+              "description": "AppLayout navItems 加 useMemo",
+              "file": "packages/web-admin/src/components/AppLayout.tsx",
+              "changes": ["import useMemo from react", "navItems 以 useMemo(() => [...], [t]) 包裝"],
+              "complexity": "XS",
+              "agent": "frontend-expert",
+              "depends_on": [],
+              "parallel": true
+            },
+            {
+              "id": "T2",
+              "sc": "SC-5",
+              "description": "Portal Dashboard avgLatency 改用 useMemo",
+              "file": "packages/web-admin/src/app/portal/dashboard/page.tsx",
+              "changes": ["import useMemo", "行 164-178 IIFE 改為 useMemo，依賴 [latency]"],
+              "complexity": "XS",
+              "agent": "frontend-expert",
+              "depends_on": [],
+              "parallel": true
+            },
+            {
+              "id": "T3",
+              "sc": "SC-1",
+              "description": "Admin Dashboard loading 改用 LoadingSkeleton",
+              "file": "packages/web-admin/src/app/admin/(protected)/dashboard/page.tsx",
+              "changes": [
+                "import LoadingSkeleton from '@/components/analytics/LoadingSkeleton'",
+                "users section：usersLoading 時 LoadingSkeleton variant='table'，外層 border div 移至非 loading 分支",
+                "keys section：keysLoading 時 LoadingSkeleton variant='cards'"
+              ],
+              "complexity": "S",
+              "agent": "frontend-expert",
+              "depends_on": [],
+              "parallel": true
+            },
+            {
+              "id": "T4+T5",
+              "sc": "SC-3, SC-2",
+              "description": "Logs page：表格骨架 + debounce（合併執行，同一檔案）",
+              "file": "packages/web-admin/src/app/admin/(protected)/logs/page.tsx",
+              "changes": [
+                "import LoadingSkeleton",
+                "SC-3：loading 時 page 層直接顯示 LoadingSkeleton variant='table'，略過外層 border div",
+                "SC-2：新增 debouncedFilter state + debounceRef",
+                "SC-2：onChange 加 debounce 邏輯（300ms，更新 debouncedFilter + setPage(1)）",
+                "SC-2：handleFilterSubmit 改為同步 debouncedFilter（清除 timer + setDebouncedFilter + setPage(1)）",
+                "SC-2：清除按鈕同時清除兩個 state 並 cancel timer",
+                "SC-2：fetchLogs useCallback 依賴從 modelTagFilter 改為 debouncedFilter",
+                "SC-2：getUsageLogs 參數從 modelTagFilter 改為 debouncedFilter"
+              ],
+              "complexity": "M",
+              "agent": "frontend-expert",
+              "depends_on": [],
+              "parallel": true
+            },
+            {
+              "id": "T6",
+              "sc": "SC-6",
+              "description": "Recharts 圖表改用 next/dynamic",
+              "files": [
+                "packages/web-admin/src/app/portal/dashboard/page.tsx",
+                "packages/web-admin/src/app/admin/(protected)/analytics/page.tsx"
+              ],
+              "changes": [
+                "portal/dashboard：移除靜態 import，改用 dynamic() + ssr:false + loading fallback=LoadingSkeleton variant='chart'（3 個元件）",
+                "analytics/page：同上（2 個元件：TimeseriesAreaChart, LatencyLineChart）",
+                "analytics/page 已有 LoadingSkeleton import，不重複"
+              ],
+              "complexity": "S",
+              "agent": "frontend-expert",
+              "depends_on": [],
+              "parallel": true
+            }
+          ],
+          "acceptance_criteria": [
+            {
+              "id": "AC-1",
+              "sc": "SC-1",
+              "given": "Admin Dashboard 頁面開始載入",
+              "when": "usersLoading = true",
+              "then": "顯示 LoadingSkeleton variant='table'，不顯示純文字 Loading users..."
+            },
+            {
+              "id": "AC-2",
+              "sc": "SC-1",
+              "given": "Admin Dashboard API Keys 區塊載入中",
+              "when": "keysLoading = true",
+              "then": "顯示 LoadingSkeleton variant='cards'（4 格 card 骨架），不顯示純文字 Loading API keys..."
+            },
+            {
+              "id": "AC-3",
+              "sc": "SC-2",
+              "given": "在 Model Tag filter 輸入框連續輸入字元（間隔 < 300ms）",
+              "when": "每個字元輸入",
+              "then": "API 不被觸發（network tab 無新請求）"
+            },
+            {
+              "id": "AC-4",
+              "sc": "SC-2",
+              "given": "輸入框停止輸入",
+              "when": "停止輸入 300ms 後",
+              "then": "以當前輸入值觸發一次 fetchLogs API"
+            },
+            {
+              "id": "AC-5",
+              "sc": "SC-2",
+              "given": "輸入框有值",
+              "when": "點擊套用按鈕",
+              "then": "立即觸發 fetchLogs（不等 debounce 300ms）"
+            },
+            {
+              "id": "AC-6",
+              "sc": "SC-2",
+              "given": "輸入框有值且 debounce timer 尚未到期",
+              "when": "點擊清除按鈕",
+              "then": "立即清除 filter 並觸發 fetchLogs，debounce timer 被取消"
+            },
+            {
+              "id": "AC-7",
+              "sc": "SC-3",
+              "given": "Logs 頁面開始載入或按重新整理",
+              "when": "loading = true",
+              "then": "顯示 LoadingSkeleton variant='table'，視覺上只有一層外框（無雙層 border）"
+            },
+            {
+              "id": "AC-8",
+              "sc": "SC-3",
+              "given": "Logs 載入完成",
+              "when": "loading = false",
+              "then": "UsageLogsTable 正常渲染，樣式與原來相同"
+            },
+            {
+              "id": "AC-9",
+              "sc": "SC-4",
+              "given": "AppLayout 因父元件 re-render 而重新渲染，t 函式參考未變",
+              "when": "元件渲染",
+              "then": "navItems useMemo cache hit，不重新建立陣列；nav 連結數量、href、label 完全相同"
+            },
+            {
+              "id": "AC-10",
+              "sc": "SC-5",
+              "given": "Portal Dashboard latency state 有值",
+              "when": "無關 state 變動觸發 re-render",
+              "then": "avgLatency 不重新計算（useMemo cache hit）；計算結果與原 IIFE 版本相同"
+            },
+            {
+              "id": "AC-11",
+              "sc": "SC-6",
+              "given": "portal/dashboard 或 admin/analytics 頁面首次載入，Recharts bundle 尚未下載",
+              "when": "圖表元件掛載",
+              "then": "圖表位置顯示 LoadingSkeleton variant='chart'"
+            },
+            {
+              "id": "AC-12",
+              "sc": "SC-6",
+              "given": "Recharts bundle 載入完成",
+              "when": "圖表元件渲染",
+              "then": "圖表正常顯示，console 無 window is not defined 等 SSR 錯誤"
+            }
+          ],
+          "assumptions": [
+            "LoadingSkeleton 元件不需修改（現有 variant 已滿足需求）",
+            "UsageLogsTable.tsx 不需修改（loading 邏輯移至 page 層）",
+            "chart 元件本身（TimeseriesAreaChart、DonutChart、LatencyLineChart）不需修改",
+            "T2 和 T6 都改 portal/dashboard/page.tsx，但改動區域不重疊（行 164-178 vs import 區塊），可分開執行但建議同一 agent 完成"
+          ],
+          "tech_debt": [
+            "SC-2 手寫 debounce（useRef + setTimeout）因約束不引入新依賴，未來可考慮引入 use-debounce"
+          ],
+          "regression_risks": [
+            "Admin analytics page 使用 TimeseriesAreaChart 與 LatencyLineChart，T6 改動後需確認 analytics 頁面圖表正常渲染",
+            "Portal dashboard 已有完整 loading skeleton，T6 dynamic import 加上原有 loading state 控制，需確認不會出現雙重 skeleton 閃爍",
+            "T4+T5 同檔案改動，需整體驗證 Logs 頁面的篩選、分頁、清除、重新整理功能全部正常"
+          ],
+          "impact_scope": {
+            "files": [
+              {
+                "path": "packages/web-admin/src/app/admin/(protected)/dashboard/page.tsx",
+                "type": "frontend",
+                "impact": "high",
+                "sc": ["SC-1"],
+                "lines": "124-131, 161-163"
+              },
+              {
+                "path": "packages/web-admin/src/app/admin/(protected)/logs/page.tsx",
+                "type": "frontend",
+                "impact": "high",
+                "sc": ["SC-2", "SC-3"],
+                "lines": "18, 49, 51-53, 80-86, 118-120"
+              },
+              {
+                "path": "packages/web-admin/src/components/UsageLogsTable.tsx",
+                "type": "frontend",
+                "impact": "none",
+                "sc": ["SC-3"],
+                "notes": "不需修改，loading 邏輯移至 page 層"
+              },
+              {
+                "path": "packages/web-admin/src/components/AppLayout.tsx",
+                "type": "frontend",
+                "impact": "low",
+                "sc": ["SC-4"],
+                "lines": "18-29"
+              },
+              {
+                "path": "packages/web-admin/src/app/portal/dashboard/page.tsx",
+                "type": "frontend",
+                "impact": "medium",
+                "sc": ["SC-5", "SC-6"],
+                "lines": "22-24 (import), 164-178 (avgLatency)"
+              },
+              {
+                "path": "packages/web-admin/src/app/admin/(protected)/analytics/page.tsx",
+                "type": "frontend",
+                "impact": "medium",
+                "sc": ["SC-6"],
+                "lines": "18-19 (import)"
+              }
+            ]
+          }
+        }
+      },
+      "s2": { "status": "skipped", "output": { "reason": "Quick 模式跳過 S2" } },
+      "s3": { "status": "completed" },
+      "s4": {
+        "status": "completed",
+        "agents": ["orchestrator"],
+        "started_at": "2026-03-15T08:00:00Z",
+        "completed_at": "2026-03-15T08:30:00Z",
+        "output": {
+          "build_status": "pass",
+          "completed_tasks": [
+            { "id": "T1", "sc": "SC-4", "status": "completed", "file": "packages/web-admin/src/components/AppLayout.tsx" },
+            { "id": "T2", "sc": "SC-5", "status": "completed", "file": "packages/web-admin/src/app/portal/dashboard/page.tsx" },
+            { "id": "T3", "sc": "SC-1", "status": "completed", "file": "packages/web-admin/src/app/admin/(protected)/dashboard/page.tsx" },
+            { "id": "T4+T5", "sc": "SC-2,SC-3", "status": "completed", "file": "packages/web-admin/src/app/admin/(protected)/logs/page.tsx" },
+            { "id": "T6", "sc": "SC-6", "status": "completed", "files": ["packages/web-admin/src/app/portal/dashboard/page.tsx", "packages/web-admin/src/app/admin/(protected)/analytics/page.tsx"] }
+          ],
+          "changes": [
+            "packages/web-admin/src/components/AppLayout.tsx",
+            "packages/web-admin/src/app/admin/(protected)/dashboard/page.tsx",
+            "packages/web-admin/src/app/admin/(protected)/logs/page.tsx",
+            "packages/web-admin/src/app/portal/dashboard/page.tsx",
+            "packages/web-admin/src/app/admin/(protected)/analytics/page.tsx"
+          ]
+        }
+      },
+      "s5": {
+        "status": "completed",
+        "repair_loop_count": 1,
+        "output": {
+          "conclusion": "pass",
+          "score": 92,
+          "review_scope": "scoped",
+          "issues": { "p0_critical": 0, "p1_blocking": 0, "p2_recommended": 1 },
+          "fixes_applied": ["CR-P1-001: debounce timer cleanup useEffect added to logs/page.tsx"],
+          "spec_verification": {
+            "sc_pass_rate": "6/6",
+            "scope_consistency": "pass",
+            "dod_pass_rate": "5/5"
+          }
+        }
+      },
+      "s6": {
+        "status": "completed",
+        "agent": "test-engineer",
+        "output": {
+          "automated_tests": { "typescript": "pass", "next_build": "pass" },
+          "ac_verification": { "total": 12, "passed": 12, "failed": 0 },
+          "additional_checks": { "debounce_cleanup": "pass", "no_double_border": "pass", "analytics_dynamic": "pass" },
+          "defects": [],
+          "recommendation": "all_pass"
+        }
+      },
+      "s7": {
+        "status": "completed",
+        "output": {
+          "changes": {
+            "modified": [
+              "packages/web-admin/src/components/AppLayout.tsx",
+              "packages/web-admin/src/app/admin/(protected)/dashboard/page.tsx",
+              "packages/web-admin/src/app/admin/(protected)/logs/page.tsx",
+              "packages/web-admin/src/app/portal/dashboard/page.tsx",
+              "packages/web-admin/src/app/admin/(protected)/analytics/page.tsx"
+            ]
+          },
+          "stats": "5 files changed, +69 -26"
+        }
+      },
+      "lessons_learned": {
+        "what_went_well": [
+          "現有 LoadingSkeleton 元件的 variant 設計可直接複用，無需新建元件",
+          "page 層條件渲染策略成功避免雙層 border 問題",
+          "Quick 模式 S0→S7 全自動推進，效率高"
+        ],
+        "what_went_wrong": [
+          "S5 發現 debounce timer 未在 unmount 時 cleanup — 手寫 debounce 容易遺漏 cleanup"
+        ],
+        "new_pitfalls": [
+          "手寫 debounce (useRef + setTimeout) 必須配合 useEffect cleanup，否則 unmount 後 setState 導致 memory leak"
+        ]
+      }
+    }
+  }
+}

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import { RefreshCw, AlertCircle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import {
@@ -15,8 +16,14 @@ import StatsCard from '@/components/analytics/StatsCard'
 import PeriodSelector from '@/components/analytics/PeriodSelector'
 import EmptyState from '@/components/analytics/EmptyState'
 import LoadingSkeleton from '@/components/analytics/LoadingSkeleton'
-import TimeseriesAreaChart from '@/components/charts/TimeseriesAreaChart'
-import LatencyLineChart from '@/components/charts/LatencyLineChart'
+const TimeseriesAreaChart = dynamic(
+  () => import('@/components/charts/TimeseriesAreaChart'),
+  { loading: () => <LoadingSkeleton variant="chart" />, ssr: false }
+)
+const LatencyLineChart = dynamic(
+  () => import('@/components/charts/LatencyLineChart'),
+  { loading: () => <LoadingSkeleton variant="chart" />, ssr: false }
+)
 
 function SectionCard({
   title,

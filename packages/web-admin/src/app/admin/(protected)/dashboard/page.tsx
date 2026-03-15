@@ -7,6 +7,7 @@ import { makeAdminApi, makeKeysApi, AdminUser, ApiKey } from '@/lib/api'
 import UserTable from '@/components/UserTable'
 import ApiKeyCard from '@/components/ApiKeyCard'
 import ApiKeyCreateModal from '@/components/ApiKeyCreateModal'
+import LoadingSkeleton from '@/components/analytics/LoadingSkeleton'
 import { Plus, RefreshCw } from 'lucide-react'
 
 export default function DashboardPage() {
@@ -120,15 +121,13 @@ export default function DashboardPage() {
             {usersError}
           </div>
         )}
-        <div className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
-          {usersLoading ? (
-            <div className="flex items-center justify-center py-12 text-gray-400 text-sm">
-              Loading users...
-            </div>
-          ) : (
+        {usersLoading ? (
+          <LoadingSkeleton variant="table" />
+        ) : (
+          <div className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
             <UserTable users={users} onQuotaUpdate={handleQuotaUpdate} onTierUpdate={handleTierUpdate} />
-          )}
-        </div>
+          </div>
+        )}
       </section>
 
       {/* API Keys Section */}
@@ -159,7 +158,7 @@ export default function DashboardPage() {
           </div>
         )}
         {keysLoading ? (
-          <div className="text-sm text-gray-400 text-center py-8">Loading API keys...</div>
+          <LoadingSkeleton variant="cards" />
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {apiKeys.map((key) => (

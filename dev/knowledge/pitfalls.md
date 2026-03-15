@@ -47,3 +47,8 @@
   — webhook-notify (2026-03)
 - S4 完成所有 Task commit 後，必須同步更新 sdd_context.json 的 s4 output，否則後續 Stage 無法正確恢復
   — webhook-notify-v2 (2026-03)
+
+## React Hooks / 前端效能
+
+- 手寫 debounce (useRef + setTimeout) 必須配合 useEffect cleanup，否則元件 unmount 後 setState 導致 memory leak — 建議用 `useEffect(() => () => clearTimeout(ref.current), [])` 確保清理
+  — dashboard-ux-polish (2026-03)

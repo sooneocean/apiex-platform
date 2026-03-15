@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { makeAdminApi, UsageLog, Pagination } from '@/lib/api'
 import UsageLogsTable from '@/components/UsageLogsTable'
+import LoadingSkeleton from '@/components/analytics/LoadingSkeleton'
 import { RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react'
 
 const PER_PAGE = 20
@@ -16,6 +17,8 @@ export default function LogsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [modelTagFilter, setModelTagFilter] = useState('')
+  const [debouncedFilter, setDebouncedFilter] = useState('')
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [page, setPage] = useState(1)
 
   async function getToken(): Promise<string> {
@@ -34,7 +37,7 @@ export default function LogsPage() {
       const token = await getToken()
       const adminApi = makeAdminApi(token)
       const result = await adminApi.getUsageLogs({
-        model_tag: modelTagFilter || undefined,
+        model_tag: debouncedFilter || undefined,
         page,
         per_page: PER_PAGE,
       })
@@ -46,14 +49,31 @@ export default function LogsPage() {
       setLoading(false)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, modelTagFilter])
+  }, [page, debouncedFilter])
 
   useEffect(() => {
     fetchLogs()
   }, [fetchLogs])
 
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [])
+
+  function handleFilterChange(value: string) {
+    setModelTagFilter(value)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      setDebouncedFilter(value)
+      setPage(1)
+    }, 300)
+  }
+
   function handleFilterSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    setDebouncedFilter(modelTagFilter)
     setPage(1)
   }
 
@@ -80,7 +100,7 @@ export default function LogsPage() {
           <input
             type="text"
             value={modelTagFilter}
-            onChange={(e) => setModelTagFilter(e.target.value)}
+            onChange={(e) => handleFilterChange(e.target.value)}
             placeholder="e.g. gpt-4o"
             className="rounded-md border border-gray-300 px-3 py-1.5 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-gray-400"
           />
@@ -98,7 +118,9 @@ export default function LogsPage() {
             <button
               type="button"
               onClick={() => {
+                if (debounceRef.current) clearTimeout(debounceRef.current)
                 setModelTagFilter('')
+                setDebouncedFilter('')
                 setPage(1)
               }}
               className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
@@ -115,9 +137,13 @@ export default function LogsPage() {
         </div>
       )}
 
-      <div className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
-        <UsageLogsTable logs={logs} loading={loading} />
-      </div>
+      {loading ? (
+        <LoadingSkeleton variant="table" />
+      ) : (
+        <div className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
+          <UsageLogsTable logs={logs} loading={false} />
+        </div>
+      )}
 
       {/* Pagination */}
       {pagination && pagination.total > PER_PAGE && (
