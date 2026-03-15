@@ -57,6 +57,7 @@ export default function WebhooksSettingsPage() {
   const [selectedEvents, setSelectedEvents] = useState<NotificationEventType[]>(
     NOTIFICATION_EVENTS.map((e) => e.value)
   )
+  const [isActive, setIsActive] = useState(true)
 
   const [testResult, setTestResult] = useState<{ status: number | null; ok: boolean } | null>(null)
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
@@ -82,6 +83,7 @@ export default function WebhooksSettingsPage() {
         setConfig(existing)
         setUrl(existing.url)
         setSelectedEvents(existing.events as NotificationEventType[])
+        setIsActive(existing.is_active)
 
         // Load logs for this config
         const logsResp = await api.logs(existing.id, 20)
@@ -121,6 +123,7 @@ export default function WebhooksSettingsPage() {
         url: url.trim(),
         ...(secret.trim() ? { secret: secret.trim() } : {}),
         events: selectedEvents,
+        is_active: isActive,
       })
       setConfig(resp.data)
       showToast('success', 'Webhook 設定已儲存')
@@ -146,6 +149,7 @@ export default function WebhooksSettingsPage() {
       setUrl('')
       setSecret('')
       setSelectedEvents(NOTIFICATION_EVENTS.map((e) => e.value))
+      setIsActive(true)
       setLogs([])
       showToast('success', 'Webhook 設定已刪除')
     } catch (err) {
@@ -247,6 +251,29 @@ export default function WebhooksSettingsPage() {
               </label>
             ))}
           </div>
+        </div>
+
+        {/* Active Toggle */}
+        <div className="flex items-center justify-between">
+          <div>
+            <label className="block text-sm font-medium text-gray-700">啟用 Webhook</label>
+            <p className="text-xs text-gray-500 mt-0.5">停用後將不再發送任何通知推播</p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={isActive}
+            onClick={() => setIsActive((v) => !v)}
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+              isActive ? 'bg-blue-600' : 'bg-gray-200'
+            }`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                isActive ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
         </div>
 
         {/* Actions */}

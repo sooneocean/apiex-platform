@@ -38,3 +38,10 @@
   — analytics-dashboard (2026-03)
 - Tremor v3 不支援 Tailwind v4 — 用 Recharts 替代
   — analytics-dashboard (2026-03)
+
+## Webhook 通知
+
+- 通知 dedup 需要複合索引 (event_type, key_id, created_at DESC)，否則每次請求都全表掃描
+  — webhook-notify (2026-03)
+- fire-and-forget 通知不能阻塞 proxy 請求 — 永遠用 .catch(console.error)
+  — webhook-notify (2026-03)

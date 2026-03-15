@@ -554,7 +554,7 @@ export function makeWebhooksApi(token: string) {
   return {
     get: () =>
       apiGet<WebhookConfigResponse>('/webhooks', token),
-    upsert: (data: { url: string; secret?: string; events?: string[] }) =>
+    upsert: (data: { url: string; secret?: string; events?: string[]; is_active?: boolean }) =>
       apiPost<WebhookConfigResponse>('/webhooks', data, token),
     remove: (id: string) =>
       apiDelete<{ data: { id: string; deleted: boolean } }>(`/webhooks/${id}`, token),

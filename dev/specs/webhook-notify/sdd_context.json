@@ -1,128 +1,250 @@
 {
-  "schema_version": "3.0.0",
-  "feature_id": "webhook-notify",
-  "feature_name": "Webhook 配額告警通知",
-  "status": "completed",
-  "created_at": "2026-03-15T00:00:00Z",
-  "updated_at": "2026-03-15T14:40:00Z",
-  "stage": "S7",
-  "mode": "autopilot",
-
-  "s0_brief": {
-    "problem": "用戶的 API Key 配額快耗盡時無法即時得知，導致服務中斷",
-    "solution": "當配額消耗達 80%/90%/100% 時推播 HTTP Webhook 通知",
-    "success_criteria": [
-      "三個閾值各觸發一次通知",
-      "24h 內同閾值不重複推播",
-      "所有推播結果記錄在 webhook_logs",
-      "前端可設定 URL、測試、查看記錄",
-      "單元測試覆蓋閾值邏輯與 sendNotification"
-    ]
-  },
-
-  "s1_spec": {
-    "affected_packages": [
-      "@apiex/api-server",
-      "@apiex/web-admin"
-    ],
-    "new_files": [
-      "packages/api-server/supabase/migrations/20260315200000_webhook.sql",
-      "packages/api-server/src/services/WebhookService.ts",
-      "packages/api-server/src/routes/webhooks.ts",
-      "packages/api-server/src/services/__tests__/WebhookService.test.ts",
-      "packages/api-server/src/__tests__/webhook.test.ts",
-      "packages/web-admin/src/app/portal/settings/webhooks/page.tsx"
-    ],
-    "modified_files": [
-      "packages/api-server/src/index.ts",
-      "packages/api-server/src/routes/proxy.ts",
-      "packages/web-admin/src/app/portal/layout.tsx"
-    ],
-    "db_changes": {
-      "new_tables": ["webhook_configs", "webhook_logs"],
-      "rls_enabled": true
+  "sdd_context": {
+    "version": "3.0.0",
+    "feature": "webhook-notify-v2",
+    "feature_name": "Webhook 用量通知（擴展）",
+    "current_stage": "S7",
+    "spec_mode": "full",
+    "spec_mode_reason": "擴展現有 Webhook 系統，涵蓋後端服務重構、DB Migration、API 新增、前端 2 頁面，需完整 spec 指導",
+    "work_type": "new_feature",
+    "spec_folder": "dev/specs/webhook-notify",
+    "execution_mode": "autopilot",
+    "status": "in_progress",
+    "started_at": "2026-03-15T10:00:00+08:00",
+    "last_updated": "2026-03-15T13:15:00+08:00",
+    "last_updated_by": "orchestrator",
+    "stages": {
+      "s0": {
+        "status": "completed",
+        "agent": "requirement-analyst",
+        "started_at": "2026-03-15T10:00:00+08:00",
+        "completed_at": "2026-03-15T10:15:00+08:00",
+        "output": {
+          "brief_spec_path": "dev/specs/webhook-notify/s0_brief_spec.md",
+          "work_type": "new_feature",
+          "requirement": "擴展 Webhook 通知機制，支援 quota_warning/quota_exhausted/spend_warning/spend_limit_reached 四種事件，統一 payload 格式，1h dedup，Admin 總覽介面",
+          "goal": "主動通知用戶配額和花費狀態，提供完整的 Webhook 管理介面",
+          "pain_points": [
+            "花費超支無預警",
+            "配額耗盡與警告未區分",
+            "dedup 機制低效（掃描 JSONB payload）",
+            "缺少 Admin 可見度",
+            "Payload 格式不統一"
+          ],
+          "success_criteria": [
+            "SC-1: 配額剩餘 < 20% 時發送 quota_warning",
+            "SC-2: 配額耗盡時發送 quota_exhausted",
+            "SC-3: 花費 > 80% spend_limit 時發送 spend_warning",
+            "SC-4: 花費達到 spend_limit 時發送 spend_limit_reached",
+            "SC-5: 同一 key 同一事件 1h 內不重複發送",
+            "SC-6: 通知不影響請求效能",
+            "SC-7: Payload 統一格式",
+            "SC-8: 前端 Webhook 設定頁",
+            "SC-9: Admin 查看所有用戶 Webhook 設定",
+            "SC-10: 無限配額/花費時跳過通知"
+          ],
+          "scope_in": [
+            "FA-A: notification_logs 表 + 高效 dedup",
+            "FA-A: WebhookService 擴展（4 種事件 + 統一 payload）",
+            "FA-A: proxy.ts spend 通知整合",
+            "FA-B: 前端 Webhook 設定頁",
+            "FA-C: Admin Webhook 總覽 API + 前端頁面"
+          ],
+          "scope_out": [
+            "Webhook 重試機制",
+            "Email/SMS 通知管道",
+            "自訂閾值百分比"
+          ],
+          "constraints": [
+            "fire-and-forget 模式",
+            "Next.js App Router + Tailwind CSS",
+            "dedup 視窗 1h"
+          ],
+          "functional_areas": [
+            { "id": "FA-A", "name": "通知引擎擴展", "description": "4 種事件 + dedup 改造", "independence": "medium" },
+            { "id": "FA-B", "name": "用戶 Webhook 設定頁", "description": "前端設定頁面", "independence": "high" },
+            { "id": "FA-C", "name": "Admin Webhook 總覽", "description": "Admin API + 前端頁面", "independence": "high" }
+          ],
+          "decomposition_strategy": "single_sop_fa_labeled",
+          "child_sops": []
+        }
+      },
+      "s1": {
+        "status": "completed",
+        "agents": ["codebase-explorer", "architect"],
+        "started_at": "2026-03-15T10:15:00+08:00",
+        "completed_at": "2026-03-15T10:45:00+08:00",
+        "output": {
+          "completed_phases": [1, 2],
+          "dev_spec_path": "dev/specs/webhook-notify/s1_dev_spec.md",
+          "api_spec_path": "dev/specs/webhook-notify/s1_api_spec.md",
+          "impact_scope": {
+            "backend": [
+              "packages/api-server/src/services/WebhookService.ts（修改）",
+              "packages/api-server/src/routes/proxy.ts（修改）",
+              "packages/api-server/src/routes/admin.ts（修改）",
+              "packages/api-server/src/routes/webhooks.ts（修改）",
+              "packages/api-server/src/services/__tests__/WebhookService.test.ts（修改）"
+            ],
+            "frontend": [
+              "packages/web-admin/src/app/admin/(protected)/settings/webhooks/page.tsx（新增）",
+              "packages/web-admin/src/app/admin/(protected)/webhooks/page.tsx（新增）",
+              "packages/web-admin/src/components/AppLayout.tsx（修改）",
+              "packages/web-admin/src/lib/api.ts（修改）"
+            ],
+            "database": [
+              "notification_logs（新增）"
+            ]
+          },
+          "tasks": ["T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10"],
+          "acceptance_criteria": ["AC-1", "AC-2", "AC-3", "AC-4", "AC-5", "AC-6", "AC-7", "AC-8", "AC-9", "AC-10"],
+          "assumptions": [
+            "webhook_configs 和 webhook_logs 表已在 DB 中存在（由前一輪 SOP 建立）",
+            "現有 webhook 消費者極少，payload 格式變更可接受"
+          ],
+          "solution_summary": "擴展現有 WebhookService：新增 checkAndNotifySpend + 重構 checkAndNotifyQuota 查 DB 實際值 + notification_logs 表 1h dedup + 統一 payload { event_type, key_id, key_prefix, current_value, threshold, timestamp } + Admin API + 前端 2 頁面",
+          "tech_debt": [
+            "notification_logs 無定期清理 job",
+            "webhook 無重試機制",
+            "webhook test endpoint payload 硬編碼"
+          ],
+          "regression_risks": [
+            "checkAndNotifyQuota 簽名變更影響 proxy.ts 呼叫（T4 同步更新）",
+            "payload 格式變更影響現有 webhook 消費者"
+          ]
+        }
+      },
+      "s2": {
+        "status": "skipped",
+        "output": {
+          "reason": "S0→S3 一次性規劃，spec review 由 architect 內部完成"
+        }
+      },
+      "s3": {
+        "status": "completed",
+        "agent": "architect",
+        "started_at": "2026-03-15T10:45:00+08:00",
+        "completed_at": "2026-03-15T11:00:00+08:00",
+        "output": {
+          "implementation_plan_path": "dev/specs/webhook-notify/s3_implementation_plan.md",
+          "waves": [
+            {
+              "wave": 1,
+              "name": "資料層",
+              "tasks": [
+                { "id": "T1", "name": "notification_logs DB Migration", "agent": "backend-developer", "dependencies": [], "complexity": "S", "parallel": false }
+              ]
+            },
+            {
+              "wave": 2,
+              "name": "後端核心",
+              "tasks": [
+                { "id": "T2", "name": "WebhookService — payload + spend", "agent": "backend-developer", "dependencies": ["T1"], "complexity": "L", "parallel": true },
+                { "id": "T3", "name": "WebhookService — dedup", "agent": "backend-developer", "dependencies": ["T1"], "complexity": "M", "parallel": true },
+                { "id": "T5", "name": "Admin Webhook API", "agent": "backend-developer", "dependencies": [], "complexity": "S", "parallel": true }
+              ]
+            },
+            {
+              "wave": 3,
+              "name": "後端整合",
+              "tasks": [
+                { "id": "T4", "name": "proxy.ts spend 整合", "agent": "backend-developer", "dependencies": ["T2"], "complexity": "S", "parallel": true },
+                { "id": "T10", "name": "單元測試擴展", "agent": "backend-developer", "dependencies": ["T2", "T3"], "complexity": "M", "parallel": true }
+              ]
+            },
+            {
+              "wave": 4,
+              "name": "前端基礎",
+              "tasks": [
+                { "id": "T6", "name": "API client 擴展", "agent": "frontend-developer", "dependencies": ["T5"], "complexity": "S", "parallel": true },
+                { "id": "T9", "name": "Sidebar 導航更新", "agent": "frontend-developer", "dependencies": [], "complexity": "S", "parallel": true }
+              ]
+            },
+            {
+              "wave": 5,
+              "name": "前端頁面",
+              "tasks": [
+                { "id": "T7", "name": "Webhook 設定頁", "agent": "frontend-developer", "dependencies": ["T6"], "complexity": "M", "parallel": true },
+                { "id": "T8", "name": "Admin Webhooks 總覽頁", "agent": "frontend-developer", "dependencies": ["T6"], "complexity": "S", "parallel": true }
+              ]
+            }
+          ],
+          "total_tasks": 10,
+          "estimated_waves": 5,
+          "verification": {
+            "static_analysis": ["npx tsc --noEmit"],
+            "unit_tests": ["pnpm --filter @apiex/api-server test"],
+            "build": ["cd packages/web-admin && pnpm build"]
+          }
+        }
+      },
+      "s4": {
+        "status": "completed",
+        "started_at": "2026-03-15T11:00:00+08:00",
+        "completed_at": "2026-03-15T12:30:00+08:00",
+        "output": {
+          "completed_tasks": ["T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10"],
+          "waves_completed": 5,
+          "commits": [
+            "4300c67 feat(webhook): T1 add notification_logs migration for dedup",
+            "abd1f3c feat(webhook): T2+T3+T10 refactor WebhookService with spend events and 1h dedup",
+            "8367669 feat(webhook): T4+T5 proxy spend notification and admin webhooks API",
+            "b902ba7 feat(webhook): T6+T7+T8+T9 frontend webhook UI and navigation"
+          ]
+        }
+      },
+      "s5": {
+        "status": "completed",
+        "started_at": "2026-03-15T12:30:00+08:00",
+        "completed_at": "2026-03-15T13:00:00+08:00",
+        "output": {
+          "conclusion": "pass",
+          "score": 95,
+          "engine_used": "opus_fallback",
+          "review_scope": "scoped",
+          "issues": {
+            "p0_redesign": 0,
+            "p1_blocking": 0,
+            "p2_recommended": 2
+          },
+          "recommended_fixes": [
+            "sendNotification payload body 有冗餘 event 欄位（與 event_type 重複）",
+            "Webhook 設定頁缺少 is_active toggle（upsert 永遠 is_active=true）"
+          ],
+          "spec_verification": {
+            "s0_pass_rate": "10/10",
+            "s1_scope_match": "一致（微小 scope creep 來自 i18n 設定，非本 feature）",
+            "dod_pass_rate": "47/47",
+            "api_contract_match": "6/6 endpoints 一致"
+          },
+          "test_results": {
+            "total": 223,
+            "passed": 223,
+            "failed": 0
+          }
+        }
+      },
+      "s6": {
+        "status": "completed",
+        "agent": "test-engineer",
+        "started_at": "2026-03-15T13:00:00+08:00",
+        "completed_at": "2026-03-15T13:15:00+08:00",
+        "output": {
+          "automated_tests": {
+            "backend": { "total": 223, "passed": 223, "failed": 0 },
+            "frontend_tsc": { "errors": 0 },
+            "frontend_build": { "status": "success" }
+          },
+          "acceptance_criteria": {
+            "total": 10,
+            "passed": 10,
+            "failed": 0
+          },
+          "defects": [],
+          "repair_loop_count": 0,
+          "recommendation": "all_pass"
+        }
+      }
     }
-  },
-
-  "tasks": [
-    {
-      "id": "T1",
-      "title": "DB Migration",
-      "status": "completed",
-      "file": "packages/api-server/supabase/migrations/20260315200000_webhook.sql",
-      "notes": "建立 webhook_configs、webhook_logs 表及 RLS policies"
-    },
-    {
-      "id": "T2",
-      "title": "WebhookService",
-      "status": "completed",
-      "file": "packages/api-server/src/services/WebhookService.ts",
-      "notes": "getConfig、upsertConfig、deleteConfig、listLogs、sendNotification、checkAndNotifyQuota、_hasRecentLog"
-    },
-    {
-      "id": "T3",
-      "title": "Webhook Routes",
-      "status": "completed",
-      "file": "packages/api-server/src/routes/webhooks.ts",
-      "notes": "GET/POST /webhooks、DELETE /webhooks/:id、GET /webhooks/:id/logs、POST /webhooks/test；掛載於 index.ts"
-    },
-    {
-      "id": "T4",
-      "title": "Proxy 整合",
-      "status": "completed",
-      "file": "packages/api-server/src/routes/proxy.ts",
-      "notes": "非串流與串流路徑的 settleQuota 後均加入 fire-and-forget checkAndNotifyQuota"
-    },
-    {
-      "id": "T5",
-      "title": "前端 Webhook 設定頁",
-      "status": "completed",
-      "file": "packages/web-admin/src/app/portal/settings/webhooks/page.tsx",
-      "notes": "URL 輸入、Secret、儲存、測試按鈕、推播記錄列表；加入 portal layout 導覽"
-    },
-    {
-      "id": "T6",
-      "title": "測試",
-      "status": "completed",
-      "files": [
-        "packages/api-server/src/services/__tests__/WebhookService.test.ts",
-        "packages/api-server/src/__tests__/webhook.test.ts"
-      ],
-      "notes": "WebhookService 18 個測試、webhook routes 8 個測試，全部通過（214/214）"
-    }
-  ],
-
-  "test_results": {
-    "total": 214,
-    "passed": 214,
-    "failed": 0,
-    "command": "pnpm --filter @apiex/api-server test"
-  },
-
-  "commits": [
-    {
-      "message": "test(red): webhook notification failing tests",
-      "files": [
-        "packages/api-server/src/services/__tests__/WebhookService.test.ts",
-        "packages/api-server/src/__tests__/webhook.test.ts"
-      ]
-    },
-    {
-      "message": "feat(green): webhook notification — DB + service + routes + proxy",
-      "files": [
-        "packages/api-server/supabase/migrations/20260315200000_webhook.sql",
-        "packages/api-server/src/services/WebhookService.ts",
-        "packages/api-server/src/routes/webhooks.ts",
-        "packages/api-server/src/index.ts",
-        "packages/api-server/src/routes/proxy.ts"
-      ]
-    },
-    {
-      "message": "feat: webhook settings UI page",
-      "files": [
-        "packages/web-admin/src/app/portal/settings/webhooks/page.tsx",
-        "packages/web-admin/src/app/portal/layout.tsx"
-      ]
-    }
-  ]
+  }
 }
