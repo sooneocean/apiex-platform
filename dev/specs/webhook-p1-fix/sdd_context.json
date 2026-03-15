@@ -3,14 +3,15 @@
     "version": "3.0.0",
     "feature": "webhook-p1-fix",
     "feature_name": "Webhook P1 修復（時序 + error logging + 清理 + 測試覆蓋）",
-    "current_stage": "S4",
+    "current_stage": "S7_DONE",
     "spec_mode": "quick",
     "work_type": "bugfix",
     "spec_folder": "dev/specs/webhook-p1-fix",
     "execution_mode": "autopilot",
-    "status": "in_progress",
+    "status": "completed",
+    "completed_at": "2026-03-15T21:30:00+08:00",
     "started_at": "2026-03-15T15:00:00+08:00",
-    "last_updated": "2026-03-15T15:00:00+08:00",
+    "last_updated": "2026-03-15T21:30:00+08:00",
     "last_updated_by": "orchestrator",
     "stages": {
       "s0": {
@@ -28,7 +29,14 @@
             "SC-7: exactly 80% spend 和 20% quota 邊界有測試"
           ]
         }
-      }
+      },
+      "s1": { "status": "completed", "output": { "note": "Quick bugfix, inline analysis" } },
+      "s2": { "status": "skipped" },
+      "s3": { "status": "completed" },
+      "s4": { "status": "completed", "output": { "commit_hash": "ca9e518", "tests_added": 15 } },
+      "s5": { "status": "completed", "output": { "conclusion": "pass", "score": 95, "spec_verification": { "sc_pass_rate": "7/7" } } },
+      "s6": { "status": "completed", "output": { "test_stats": { "total_tests": 249, "passed": 249 }, "recommendation": "all_pass" } },
+      "s7": { "status": "completed", "output": { "commit_hash": "ca9e518", "branch": "main" } }
     }
   }
 }
