@@ -106,4 +106,16 @@ export const Errors = {
 
   rateLimitExceeded: () =>
     makeError('Rate limit exceeded. Please wait before retrying.', 'rate_limit_error', 'rate_limit', 429),
+
+  invalidPlan: () =>
+    makeError('Invalid plan. Valid values: plan_5, plan_10, plan_20.', 'invalid_request_error', 'invalid_plan', 400),
+
+  stripeError: (detail?: string) =>
+    makeError(detail ?? 'Stripe service error.', 'server_error', 'stripe_error', 500),
+
+  invalidSignature: () =>
+    makeError('Invalid webhook signature.', 'invalid_request_error', 'invalid_signature', 400),
+
+  missingSessionId: () =>
+    makeError('Missing session_id parameter.', 'invalid_request_error', 'missing_session_id', 400),
 }
