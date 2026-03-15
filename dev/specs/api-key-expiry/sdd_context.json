@@ -1,0 +1,56 @@
+{
+  "sdd_context": {
+    "version": "3.0.0",
+    "feature": "api-key-expiry",
+    "feature_name": "API Key 過期功能",
+    "current_stage": "S1",
+    "spec_mode": "quick",
+    "spec_mode_reason": "1 migration + middleware 修改 + keys API 修改，規模 S~M",
+    "work_type": "new_feature",
+    "spec_folder": "dev/specs/api-key-expiry",
+    "execution_mode": "autopilot",
+    "status": "in_progress",
+    "started_at": "2026-03-15T17:00:00+08:00",
+    "last_updated": "2026-03-15T17:00:00+08:00",
+    "last_updated_by": "requirement-analyst",
+    "stages": {
+      "s0": {
+        "status": "completed",
+        "agent": "requirement-analyst",
+        "started_at": "2026-03-15T17:00:00+08:00",
+        "completed_at": "2026-03-15T17:05:00+08:00",
+        "output": {
+          "work_type": "new_feature",
+          "requirement": "API Key 新增過期時間欄位，middleware 檢查過期，API 支援設定/查看",
+          "goal": "API Key 可設定過期時間，過期後自動拒絕請求",
+          "pain_points": ["API Key 一旦建立永不過期，無法控制存取時效"],
+          "success_criteria": [
+            "SC-1: api_keys 表新增 expires_at 欄位（nullable）",
+            "SC-2: apiKeyAuth middleware 檢查 expires_at，過期返回 401",
+            "SC-3: expires_at = null 時永不過期（向後相容）",
+            "SC-4: 建立 key 時可選設定 expires_at",
+            "SC-5: 前端顯示 key 過期狀態",
+            "SC-6: 現有測試全部通過"
+          ],
+          "scope_in": [
+            "DB migration: api_keys 加 expires_at",
+            "apiKeyAuth middleware: 過期檢查",
+            "keys API: 建立/更新時支援 expires_at",
+            "前端 key 列表顯示過期狀態"
+          ],
+          "scope_out": [
+            "自動清理過期 key（cron job）",
+            "過期前通知（email/webhook）",
+            "Key rotation 機制"
+          ],
+          "constraints": ["向後相容：null = 永不過期"],
+          "functional_areas": [
+            { "id": "FA-A", "name": "API Key 過期", "description": "DB + middleware + API + 前端", "independence": "high" }
+          ],
+          "decomposition_strategy": "single_sop",
+          "child_sops": []
+        }
+      }
+    }
+  }
+}
