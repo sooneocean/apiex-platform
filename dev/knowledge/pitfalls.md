@@ -16,3 +16,13 @@
 
 - 前後端分頁參數命名必須一致（per_page vs limit vs page_size）
   — apiex-platform (2026-03)
+
+## Supabase JS Client 陷阱
+
+- Supabase JS `.update({ col: val })` 是 SET 不是 INCREMENT — 需要原子累加時必須用 SQL function + `.rpc()`
+  — stripe-topup (2026-03)
+
+## Stripe 整合
+
+- Stripe Webhook 的 `amount_total` 單位是 cents（整數），前端顯示時需 /100 轉換
+  — stripe-topup (2026-03)

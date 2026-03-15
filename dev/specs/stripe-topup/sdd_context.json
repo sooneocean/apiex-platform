@@ -1,0 +1,632 @@
+{
+  "sdd_context": {
+    "version": "3.0.0",
+    "feature": "stripe-topup",
+    "current_stage": "S7",
+    "spec_mode": "full",
+    "spec_mode_reason": "新功能，涉及第三方金流整合（Stripe）、DB schema 變更、前端新頁面、Webhook 處理，複雜度中等，需完整 spec",
+    "work_type": "new_feature",
+    "spec_folder": "dev/specs/stripe-topup",
+    "execution_mode": "autopilot",
+    "status": "completed",
+    "started_at": "2026-03-15T02:00:00+08:00",
+    "last_updated": "2026-03-15T03:15:00+08:00",
+    "last_updated_by": "architect",
+    "completed_at": null,
+    "stages": {
+      "s0": {
+        "status": "completed",
+        "agent": "requirement-analyst",
+        "started_at": "2026-03-15T02:00:00+08:00",
+        "completed_at": "2026-03-15T02:05:00+08:00",
+        "output": {
+          "brief_spec_path": "dev/specs/stripe-topup/s0_brief_spec.md",
+          "work_type": "new_feature",
+          "requirement": "讓 Apiex 平台用戶透過 Stripe Checkout Session 自助儲值，付款成功後系統自動增加 quota_tokens，取代 admin 手動設定配額",
+          "goal": "建立完整的預付儲值閉環：選擇方案 → 付款 → 自動到帳 → 可查記錄",
+          "pain_points": [
+            "admin 手動設定 quota 無法 scale",
+            "用戶等待 admin 體驗差",
+            "無付款記錄追蹤"
+          ],
+          "success_criteria": [
+            "用戶選擇方案後成功跳轉至 Stripe Checkout",
+            "Stripe 付款成功後用戶被重導至成功頁",
+            "Webhook 收到 checkout.session.completed 後 quota_tokens 正確累加",
+            "Webhook 簽名驗證失敗時回傳 400 不處理",
+            "同一 stripe_event_id 重複送達不會雙倍累加 quota",
+            "用戶可查看自己的充值記錄",
+            "Admin 可查看所有用戶充值記錄",
+            "成功頁 polling 確認 quota 更新後顯示成功訊息"
+          ],
+          "scope_in": [
+            "FA-B1: 儲值方案選擇 UI（固定 $5/$10/$20）",
+            "FA-B1: Stripe Checkout Session 建立 API",
+            "FA-B1: 成功/取消返回頁面 + polling 機制",
+            "FA-B2: Stripe Webhook endpoint（簽名驗證 + 冪等處理）",
+            "FA-B2: quota_tokens 自動累加",
+            "FA-B2: topup_logs 記錄寫入",
+            "FA-B3: 用戶充值記錄 API + 頁面",
+            "FA-B3: Admin 充值記錄 API + 頁面"
+          ],
+          "scope_out": [
+            "自動計費扣款（後付制）",
+            "退款流程",
+            "訂閱制方案",
+            "多幣種支援",
+            "自由輸入金額",
+            "客製化發票",
+            "per-key 儲值",
+            "Stripe Payment Intents / Elements 內嵌表單"
+          ],
+          "constraints": [
+            "Stripe Checkout Session 跳轉模式",
+            "幣種固定 USD",
+            "$1 = 100,000 quota_tokens",
+            "固定方案 $5/$10/$20",
+            "Stripe Test Mode",
+            "直接累加 quota_tokens 不拆分",
+            "需安裝 stripe npm package"
+          ],
+          "functional_areas": [
+            {
+              "id": "FA-B1",
+              "name": "用戶自助儲值",
+              "description": "用戶選擇方案、透過 Stripe 付款、自動取得 quota",
+              "independence": "high"
+            },
+            {
+              "id": "FA-B2",
+              "name": "Webhook 處理與帳務",
+              "description": "接收 Stripe Webhook、冪等累加 quota、記錄 topup_logs",
+              "independence": "high"
+            },
+            {
+              "id": "FA-B3",
+              "name": "充值記錄檢視",
+              "description": "用戶查看自己的充值記錄；Admin 查看所有充值記錄",
+              "independence": "medium"
+            }
+          ],
+          "decomposition_strategy": "single_sop_fa_labeled",
+          "child_sops": []
+        }
+      },
+      "s1": {
+        "status": "completed",
+        "agents": ["codebase-explorer", "architect"],
+        "started_at": "2026-03-15T02:10:00+08:00",
+        "completed_at": "2026-03-15T03:00:00+08:00",
+        "output": {
+          "completed_phases": [1, 2],
+          "dev_spec_path": "dev/specs/stripe-topup/s1_dev_spec.md",
+          "api_spec_path": "dev/specs/stripe-topup/s1_api_spec.md",
+          "tasks": ["T01", "T02", "T03", "T04", "T05", "T06", "T07", "T08", "T09", "T10", "T11", "T12", "T13", "T14", "T15"],
+          "acceptance_criteria": ["AC-1", "AC-2", "AC-3", "AC-4", "AC-5", "AC-6", "AC-7", "AC-8", "AC-9", "AC-10", "AC-11"],
+          "assumptions": [
+            "Stripe Test Mode 即可驗收",
+            "固定三個方案 hardcode，不需 DB 動態設定",
+            "Portal 共用 /admin/login 登入頁"
+          ],
+          "solution_summary": "後端新增 TopupService + topup routes 整合 Stripe Checkout Session，Webhook 冪等處理（stripe_event_id UNIQUE），quota_tokens 同步累加 user_quotas 和 api_keys。前端新增 /portal/* 路由組含儲值頁、成功/取消頁、記錄頁。Admin UI 新增充值記錄頁。資料層新增 topup_logs 表。",
+          "tech_debt": [
+            "stripe npm package 需安裝，api-server 目前無此依賴",
+            "Portal 認證體系是獨立於 admin 的新路由組，需同步維護 middleware.ts",
+            "topup_logs RLS 需要讓用戶只能看自己的記錄"
+          ],
+          "regression_risks": [
+            "admin.ts 新增 topup-logs endpoint — 需確認不影響現有 /admin/users 和 /admin/usage-logs",
+            "index.ts 掛載新路由 — CORS 設定已是 wildcard，影響低",
+            "middleware.ts 修改 matcher — 需確認不影響現有 /admin/:path* 保護邏輯"
+          ],
+          "impact_scope": {
+            "backend": [
+              {
+                "file": "packages/api-server/src/routes/topup.ts",
+                "type": "新增",
+                "impact": "高",
+                "description": "POST /topup/checkout、POST /topup/webhook、GET /topup/status、GET /topup/logs"
+              },
+              {
+                "file": "packages/api-server/src/services/TopupService.ts",
+                "type": "新增",
+                "impact": "高",
+                "description": "封裝 Stripe API 呼叫、topup_logs 寫入、quota_tokens 累加邏輯"
+              },
+              {
+                "file": "packages/api-server/src/routes/admin.ts",
+                "type": "修改",
+                "impact": "低",
+                "description": "新增 GET /admin/topup-logs"
+              },
+              {
+                "file": "packages/api-server/src/index.ts",
+                "type": "修改",
+                "impact": "低",
+                "description": "掛載 topup routes，webhook 獨立掛載跳過 JWT auth"
+              },
+              {
+                "file": "packages/api-server/src/lib/stripe.ts",
+                "type": "新增",
+                "impact": "中",
+                "description": "Stripe client singleton"
+              },
+              {
+                "file": "packages/api-server/src/lib/errors.ts",
+                "type": "修改",
+                "impact": "低",
+                "description": "新增 invalidPlan, stripeError, invalidSignature, missingSessionId"
+              },
+              {
+                "file": "packages/api-server/package.json",
+                "type": "修改",
+                "impact": "低",
+                "description": "新增 stripe npm package 依賴"
+              }
+            ],
+            "frontend": [
+              {
+                "file": "packages/web-admin/src/app/portal/layout.tsx",
+                "type": "新增",
+                "impact": "高",
+                "description": "Portal layout"
+              },
+              {
+                "file": "packages/web-admin/src/app/portal/topup/page.tsx",
+                "type": "新增",
+                "impact": "高",
+                "description": "儲值方案選擇頁"
+              },
+              {
+                "file": "packages/web-admin/src/app/portal/topup/success/page.tsx",
+                "type": "新增",
+                "impact": "中",
+                "description": "付款成功頁 + polling"
+              },
+              {
+                "file": "packages/web-admin/src/app/portal/topup/cancel/page.tsx",
+                "type": "新增",
+                "impact": "低",
+                "description": "付款取消頁"
+              },
+              {
+                "file": "packages/web-admin/src/app/portal/logs/page.tsx",
+                "type": "新增",
+                "impact": "中",
+                "description": "用戶充值記錄頁"
+              },
+              {
+                "file": "packages/web-admin/src/app/admin/(protected)/topup-logs/page.tsx",
+                "type": "新增",
+                "impact": "中",
+                "description": "Admin 充值記錄頁"
+              },
+              {
+                "file": "packages/web-admin/src/components/AppLayout.tsx",
+                "type": "修改",
+                "impact": "低",
+                "description": "navItems 新增 Topup Logs"
+              },
+              {
+                "file": "packages/web-admin/src/lib/api.ts",
+                "type": "修改",
+                "impact": "低",
+                "description": "新增 makeTopupApi"
+              },
+              {
+                "file": "packages/web-admin/src/middleware.ts",
+                "type": "修改",
+                "impact": "中",
+                "description": "matcher 加入 /portal/:path*"
+              }
+            ],
+            "database": [
+              {
+                "file": "supabase/migrations/004_topup_logs.sql",
+                "type": "新增",
+                "impact": "高",
+                "description": "topup_logs 表 + indexes + RLS"
+              }
+            ]
+          },
+          "dependencies": {
+            "upstream": [
+              "Stripe API（外部）— Checkout Session 建立、Webhook 驗證",
+              "Supabase Auth — 用戶 JWT 驗證"
+            ],
+            "downstream": [
+              "user_quotas.default_quota_tokens — 累加",
+              "api_keys.quota_tokens — 同步累加"
+            ],
+            "reusable": [
+              "supabaseJwtAuth middleware",
+              "adminAuth middleware",
+              "supabaseAdmin client",
+              "Errors lib",
+              "AppLayout.tsx",
+              "api.ts helpers"
+            ]
+          },
+          "risks": [
+            {
+              "id": "R1",
+              "risk": "Webhook raw body 解析",
+              "level": "高",
+              "description": "Stripe webhook 簽名驗證需要 raw body，Hono 使用 c.req.text() 即可",
+              "mitigation": "使用 c.req.text() 取 raw body，整合測試覆蓋"
+            },
+            {
+              "id": "R2",
+              "risk": "quota_tokens race condition",
+              "level": "中",
+              "description": "stripe_event_id UNIQUE constraint 做冪等",
+              "mitigation": "捕捉 PostgreSQL 23505 error，視為冪等成功"
+            },
+            {
+              "id": "R3",
+              "risk": "quota_tokens 累加對象",
+              "level": "已解決",
+              "description": "U1 裁決：兩者都更新",
+              "mitigation": "與 admin PATCH quota 一致"
+            },
+            {
+              "id": "R4",
+              "risk": "Portal 認證方式",
+              "level": "已解決",
+              "description": "U2 裁決：共用 /admin/login",
+              "mitigation": "middleware 擴展保護 /portal/*"
+            },
+            {
+              "id": "R5",
+              "risk": "Stripe env vars 管理",
+              "level": "低",
+              "description": "需新增 STRIPE_SECRET_KEY 和 STRIPE_WEBHOOK_SECRET",
+              "mitigation": ".env.example + 部署文件說明"
+            }
+          ],
+          "unknowns_resolved": {
+            "U1": "兩者都更新（user_quotas + 所有 active api_keys）",
+            "U2": "共用 /admin/login，middleware 保護 /portal/*",
+            "U3": "GET /topup/status?session_id={id} 專用 endpoint",
+            "U4": "只有 completed（Webhook 成功才寫入）"
+          }
+        }
+      },
+      "s2": {
+        "status": "completed",
+        "started_at": "2026-03-15T03:05:00+08:00",
+        "completed_at": "2026-03-15T03:10:00+08:00",
+        "output": {
+          "conclusion": "pass",
+          "engine_used": "opus_fallback",
+          "short_circuit": true,
+          "r1_totals": { "P0": 0, "P1": 0, "P2": 3 },
+          "p2_summary": [
+            "SR-1: /topup/status 未驗證 session 歸屬（低風險）",
+            "SR-2: INSERT+UPDATE 未包 transaction（極罕見失敗）",
+            "SR-3: Admin topup-logs user_email join 方式未明確"
+          ]
+        }
+      },
+      "s3": {
+        "status": "completed",
+        "agent": "architect",
+        "started_at": "2026-03-15T03:10:00+08:00",
+        "completed_at": "2026-03-15T03:15:00+08:00",
+        "output": {
+          "implementation_plan_path": "dev/specs/stripe-topup/s3_implementation_plan.md",
+          "total_tasks": 15,
+          "estimated_waves": 5,
+          "waves": [
+            {
+              "wave": 1,
+              "name": "基礎設施",
+              "parallel": true,
+              "tasks": [
+                {
+                  "id": "T01",
+                  "name": "DB Migration: topup_logs 表",
+                  "agent": "backend-developer",
+                  "dependencies": [],
+                  "complexity": "S",
+                  "parallel": true,
+                  "affected_files": ["supabase/migrations/004_topup_logs.sql"],
+                  "tdd_plan": null,
+                  "tdd_skip_justification": "Migration DDL，以 supabase db reset 驗證語法"
+                },
+                {
+                  "id": "T02",
+                  "name": "安裝 stripe + 初始化 Stripe client",
+                  "agent": "backend-developer",
+                  "dependencies": [],
+                  "complexity": "S",
+                  "parallel": true,
+                  "affected_files": ["packages/api-server/src/lib/stripe.ts", "packages/api-server/package.json"],
+                  "tdd_plan": null,
+                  "tdd_skip_justification": "套件安裝與初始化設定，TypeScript 編譯即驗證"
+                },
+                {
+                  "id": "T07",
+                  "name": "Errors lib: 新增 topup 錯誤碼",
+                  "agent": "backend-developer",
+                  "dependencies": [],
+                  "complexity": "S",
+                  "parallel": true,
+                  "affected_files": ["packages/api-server/src/lib/errors.ts"],
+                  "tdd_plan": null,
+                  "tdd_skip_justification": "純設定 object 擴充，TypeScript 編譯確保型別正確"
+                }
+              ]
+            },
+            {
+              "wave": 2,
+              "name": "核心後端 + 前端基礎",
+              "parallel": "部分並行：T03+T05 後端並行；T13+T08 前端可與後端並行",
+              "tasks": [
+                {
+                  "id": "T03",
+                  "name": "TopupService: 核心業務邏輯",
+                  "agent": "backend-developer",
+                  "dependencies": ["T01", "T02"],
+                  "complexity": "L",
+                  "parallel": false,
+                  "affected_files": [
+                    "packages/api-server/src/services/TopupService.ts",
+                    "packages/api-server/src/services/__tests__/TopupService.test.ts",
+                    "packages/api-server/src/lib/database.types.ts"
+                  ],
+                  "tdd_plan": {
+                    "test_file": "packages/api-server/src/services/__tests__/TopupService.test.ts",
+                    "test_cases": ["createCheckoutSession_success", "createCheckoutSession_invalidPlan", "handleWebhookEvent_success", "handleWebhookEvent_idempotent", "handleWebhookEvent_invalidSignature", "getTopupStatus_completed", "getTopupStatus_pending"],
+                    "test_command": "cd packages/api-server && pnpm vitest run src/services/__tests__/TopupService.test.ts"
+                  }
+                },
+                {
+                  "id": "T05",
+                  "name": "Admin Route: GET /admin/topup-logs",
+                  "agent": "backend-developer",
+                  "dependencies": ["T01"],
+                  "complexity": "S",
+                  "parallel": true,
+                  "affected_files": [
+                    "packages/api-server/src/routes/admin.ts",
+                    "packages/api-server/src/routes/__tests__/admin.test.ts"
+                  ],
+                  "tdd_plan": {
+                    "test_file": "packages/api-server/src/routes/__tests__/admin.test.ts",
+                    "test_cases": ["GET_admin_topup_logs_all", "GET_admin_topup_logs_filter_by_user"],
+                    "test_command": "cd packages/api-server && pnpm vitest run src/routes/__tests__/admin.test.ts"
+                  }
+                },
+                {
+                  "id": "T13",
+                  "name": "Frontend: api.ts 擴充 makeTopupApi",
+                  "agent": "frontend-developer",
+                  "dependencies": [],
+                  "complexity": "S",
+                  "parallel": true,
+                  "affected_files": ["packages/web-admin/src/lib/api.ts"],
+                  "tdd_plan": null,
+                  "tdd_skip_justification": "純 TypeScript 型別定義與 fetch wrapper，TypeScript 編譯確保型別正確"
+                },
+                {
+                  "id": "T08",
+                  "name": "Frontend: Portal layout + middleware",
+                  "agent": "frontend-developer",
+                  "dependencies": [],
+                  "complexity": "M",
+                  "parallel": true,
+                  "affected_files": [
+                    "packages/web-admin/src/app/portal/layout.tsx",
+                    "packages/web-admin/src/middleware.ts"
+                  ],
+                  "tdd_plan": null,
+                  "tdd_skip_justification": "layout 與 middleware 路由設定，手動驗證 redirect 行為"
+                }
+              ]
+            },
+            {
+              "wave": 3,
+              "name": "Route 層 + 前端頁面",
+              "parallel": "T04 後端串行；T09/T10/T11/T12 前端互相並行",
+              "tasks": [
+                {
+                  "id": "T04",
+                  "name": "Topup Routes: checkout / webhook / status / logs",
+                  "agent": "backend-developer",
+                  "dependencies": ["T03"],
+                  "complexity": "M",
+                  "parallel": false,
+                  "affected_files": [
+                    "packages/api-server/src/routes/topup.ts",
+                    "packages/api-server/src/routes/__tests__/topup.test.ts"
+                  ],
+                  "tdd_plan": {
+                    "test_file": "packages/api-server/src/routes/__tests__/topup.test.ts",
+                    "test_cases": ["POST_checkout_success", "POST_checkout_invalidPlan", "POST_webhook_success", "POST_webhook_invalidSignature", "GET_status_completed", "GET_status_pending", "GET_logs_success"],
+                    "test_command": "cd packages/api-server && pnpm vitest run src/routes/__tests__/topup.test.ts"
+                  }
+                },
+                {
+                  "id": "T09",
+                  "name": "Frontend: 儲值方案選擇頁",
+                  "agent": "frontend-developer",
+                  "dependencies": ["T08", "T13"],
+                  "complexity": "M",
+                  "parallel": true,
+                  "affected_files": ["packages/web-admin/src/app/portal/topup/page.tsx"],
+                  "tdd_plan": null,
+                  "tdd_skip_justification": "涉及 Stripe redirect，手動測試 Stripe Test Mode"
+                },
+                {
+                  "id": "T10",
+                  "name": "Frontend: 付款成功/取消頁",
+                  "agent": "frontend-developer",
+                  "dependencies": ["T08", "T13"],
+                  "complexity": "M",
+                  "parallel": true,
+                  "affected_files": [
+                    "packages/web-admin/src/app/portal/topup/success/page.tsx",
+                    "packages/web-admin/src/app/portal/topup/cancel/page.tsx"
+                  ],
+                  "tdd_plan": null,
+                  "tdd_skip_justification": "Polling 依賴 setInterval 與外部 API，手動測試完整付款流程"
+                },
+                {
+                  "id": "T11",
+                  "name": "Frontend: 用戶充值記錄頁",
+                  "agent": "frontend-developer",
+                  "dependencies": ["T08", "T13"],
+                  "complexity": "S",
+                  "parallel": true,
+                  "affected_files": ["packages/web-admin/src/app/portal/logs/page.tsx"],
+                  "tdd_plan": null,
+                  "tdd_skip_justification": "純展示頁，手動測試"
+                },
+                {
+                  "id": "T12",
+                  "name": "Frontend: Admin 充值記錄頁",
+                  "agent": "frontend-developer",
+                  "dependencies": ["T13"],
+                  "complexity": "S",
+                  "parallel": true,
+                  "affected_files": [
+                    "packages/web-admin/src/app/admin/(protected)/topup-logs/page.tsx",
+                    "packages/web-admin/src/components/AppLayout.tsx"
+                  ],
+                  "tdd_plan": null,
+                  "tdd_skip_justification": "純展示頁，手動測試"
+                }
+              ]
+            },
+            {
+              "wave": 4,
+              "name": "收尾",
+              "parallel": "T06 串行；T14+T15 可並行",
+              "tasks": [
+                {
+                  "id": "T06",
+                  "name": "index.ts: 掛載 topup routes",
+                  "agent": "backend-developer",
+                  "dependencies": ["T04"],
+                  "complexity": "S",
+                  "parallel": false,
+                  "affected_files": ["packages/api-server/src/index.ts"],
+                  "tdd_plan": null,
+                  "tdd_skip_justification": "路由掛載組態設定，業務邏輯已由 T04 單元測試覆蓋；T15 整合測試驗證路由行為"
+                },
+                {
+                  "id": "T14",
+                  "name": "環境變數設定 + 部署文件",
+                  "agent": "backend-developer",
+                  "dependencies": ["T06"],
+                  "complexity": "S",
+                  "parallel": true,
+                  "affected_files": ["packages/api-server/.env.example"],
+                  "tdd_plan": null,
+                  "tdd_skip_justification": "純文件與設定，無可測試邏輯"
+                },
+                {
+                  "id": "T15",
+                  "name": "Integration Tests",
+                  "agent": "backend-developer",
+                  "dependencies": ["T04", "T05"],
+                  "complexity": "M",
+                  "parallel": true,
+                  "affected_files": ["packages/api-server/src/__tests__/topup.integration.test.ts"],
+                  "tdd_plan": {
+                    "test_file": "packages/api-server/src/__tests__/topup.integration.test.ts",
+                    "test_cases": ["full_flow", "webhook_idempotent", "webhook_invalid_signature", "invalid_plan", "admin_topup_logs"],
+                    "test_command": "cd packages/api-server && pnpm vitest run src/__tests__/topup.integration.test.ts"
+                  }
+                }
+              ]
+            }
+          ],
+          "verification": {
+            "static_analysis": [
+              "cd packages/api-server && pnpm tsc --noEmit",
+              "cd packages/web-admin && pnpm tsc --noEmit"
+            ],
+            "unit_tests": [
+              "cd packages/api-server && pnpm vitest run src/services/__tests__/TopupService.test.ts",
+              "cd packages/api-server && pnpm vitest run src/routes/__tests__/topup.test.ts",
+              "cd packages/api-server && pnpm vitest run src/routes/__tests__/admin.test.ts"
+            ],
+            "integration_tests": [
+              "cd packages/api-server && pnpm vitest run src/__tests__/topup.integration.test.ts"
+            ],
+            "manual_tests": [
+              "Stripe Test Mode 完整付款流程（AC-10）",
+              "成功頁 polling 30s 超時提示（AC-11）",
+              "Portal 未登入 redirect 驗證"
+            ]
+          }
+        }
+      },
+      "s4": {
+        "status": "completed",
+        "started_at": "2026-03-15T03:20:00+08:00",
+        "completed_at": "2026-03-15T04:00:00+08:00",
+        "output": {
+          "completed_tasks": ["T01","T02","T03","T04","T05","T06","T07","T08","T09","T10","T11","T12","T13","T14","T15"],
+          "waves_completed": 4,
+          "build_status": { "api_server_tests": "91/91 passed", "test_files": 13 }
+        }
+      },
+      "s5": {
+        "status": "completed",
+        "started_at": "2026-03-15T04:05:00+08:00",
+        "completed_at": "2026-03-15T04:15:00+08:00",
+        "output": {
+          "conclusion": "pass",
+          "score": 4,
+          "engine_used": "opus_fallback",
+          "issues": { "p0": 1, "p1_blocking": 1, "p2": 0, "dismissed": 0 },
+          "blocking_fixes": [
+            { "id": "P0-1", "description": "addQuota() 覆蓋 quota 而非累加 — 改用 SQL function add_topup_quota", "file": "TopupService.ts", "fixed": true },
+            { "id": "P1-1", "description": "api_keys UPDATE 未排除 quota_tokens=-1 — SQL function 已含條件", "file": "TopupService.ts", "fixed": true }
+          ],
+          "fixes_applied": [
+            "新增 005_add_topup_quota.sql SQL function（原子性 UPSERT + UPDATE）",
+            "TopupService.addQuota() 改用 .rpc('add_topup_quota')",
+            "測試 mock 同步更新"
+          ],
+          "repair_loop_count": 1,
+          "next_action": "proceed_to_s6"
+        }
+      },
+      "s6": {
+        "status": "completed",
+        "started_at": "2026-03-15T04:15:00+08:00",
+        "completed_at": "2026-03-15T04:20:00+08:00",
+        "output": {
+          "automated_tests": { "total": 100, "passed": 100, "failed": 0 },
+          "recommendation": "proceed_to_s7"
+        }
+      },
+      "s7": {
+        "status": "completed",
+        "started_at": "2026-03-15T04:20:00+08:00",
+        "completed_at": "2026-03-15T04:25:00+08:00",
+        "output": {
+          "lessons_learned": {
+            "what_went_well": [
+              "TDD 流程在 TopupService 有效運作（7 tests RED→GREEN）",
+              "S5 發現 addQuota 覆蓋 bug（P0），在上線前攔截",
+              "SQL function 模式（add_topup_quota）與既有 reserve/settle_quota 一致"
+            ],
+            "what_went_wrong": [
+              "Supabase JS client 不支援 col=col+val 原子累加，開發時未意識到",
+              "測試 mock 了 .upsert()/.update() 但無法驗證 SQL 語義正確性"
+            ],
+            "new_pitfalls": [
+              "Supabase JS .update({ col: val }) 是 SET 不是 INCREMENT — 需要原子累加時必須用 SQL function + .rpc()",
+              "Stripe Webhook 的 amount_total 單位是 cents（整數），前端顯示時需 /100 轉換"
+            ]
+          }
+        }
+      }
+    }
+  }
+}
