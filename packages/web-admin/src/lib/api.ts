@@ -412,6 +412,12 @@ export function makeAdminAnalyticsApi(token: string) {
       const query = qs.toString() ? `?${qs.toString()}` : "";
       return apiGet<{ data: PlatformOverviewData }>(`/admin/analytics/overview${query}`, token, signal);
     },
+    getTimeseries: (params: { period?: Period }, signal?: AbortSignal) => {
+      const qs = new URLSearchParams();
+      if (params.period) qs.set("period", params.period);
+      const query = qs.toString() ? `?${qs.toString()}` : "";
+      return apiGet<{ data: TimeseriesData }>(`/admin/analytics/timeseries${query}`, token, signal);
+    },
     getLatency: (params: { period?: Period }, signal?: AbortSignal) => {
       const qs = new URLSearchParams();
       if (params.period) qs.set("period", params.period);
