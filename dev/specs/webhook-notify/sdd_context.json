@@ -252,6 +252,7 @@
         "started_at": "2026-03-15T13:15:00+08:00",
         "completed_at": "2026-03-15T13:30:00+08:00",
         "output": {
+          "commit_hash": "b98bda4",
           "branch": "main",
           "changes": {
             "specs": ["s0_brief_spec.md", "s1_dev_spec.md", "s1_api_spec.md", "s3_implementation_plan.md", "sdd_context.json"],
