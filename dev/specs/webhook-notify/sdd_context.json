@@ -1,0 +1,128 @@
+{
+  "schema_version": "3.0.0",
+  "feature_id": "webhook-notify",
+  "feature_name": "Webhook 配額告警通知",
+  "status": "completed",
+  "created_at": "2026-03-15T00:00:00Z",
+  "updated_at": "2026-03-15T14:40:00Z",
+  "stage": "S7",
+  "mode": "autopilot",
+
+  "s0_brief": {
+    "problem": "用戶的 API Key 配額快耗盡時無法即時得知，導致服務中斷",
+    "solution": "當配額消耗達 80%/90%/100% 時推播 HTTP Webhook 通知",
+    "success_criteria": [
+      "三個閾值各觸發一次通知",
+      "24h 內同閾值不重複推播",
+      "所有推播結果記錄在 webhook_logs",
+      "前端可設定 URL、測試、查看記錄",
+      "單元測試覆蓋閾值邏輯與 sendNotification"
+    ]
+  },
+
+  "s1_spec": {
+    "affected_packages": [
+      "@apiex/api-server",
+      "@apiex/web-admin"
+    ],
+    "new_files": [
+      "packages/api-server/supabase/migrations/20260315200000_webhook.sql",
+      "packages/api-server/src/services/WebhookService.ts",
+      "packages/api-server/src/routes/webhooks.ts",
+      "packages/api-server/src/services/__tests__/WebhookService.test.ts",
+      "packages/api-server/src/__tests__/webhook.test.ts",
+      "packages/web-admin/src/app/portal/settings/webhooks/page.tsx"
+    ],
+    "modified_files": [
+      "packages/api-server/src/index.ts",
+      "packages/api-server/src/routes/proxy.ts",
+      "packages/web-admin/src/app/portal/layout.tsx"
+    ],
+    "db_changes": {
+      "new_tables": ["webhook_configs", "webhook_logs"],
+      "rls_enabled": true
+    }
+  },
+
+  "tasks": [
+    {
+      "id": "T1",
+      "title": "DB Migration",
+      "status": "completed",
+      "file": "packages/api-server/supabase/migrations/20260315200000_webhook.sql",
+      "notes": "建立 webhook_configs、webhook_logs 表及 RLS policies"
+    },
+    {
+      "id": "T2",
+      "title": "WebhookService",
+      "status": "completed",
+      "file": "packages/api-server/src/services/WebhookService.ts",
+      "notes": "getConfig、upsertConfig、deleteConfig、listLogs、sendNotification、checkAndNotifyQuota、_hasRecentLog"
+    },
+    {
+      "id": "T3",
+      "title": "Webhook Routes",
+      "status": "completed",
+      "file": "packages/api-server/src/routes/webhooks.ts",
+      "notes": "GET/POST /webhooks、DELETE /webhooks/:id、GET /webhooks/:id/logs、POST /webhooks/test；掛載於 index.ts"
+    },
+    {
+      "id": "T4",
+      "title": "Proxy 整合",
+      "status": "completed",
+      "file": "packages/api-server/src/routes/proxy.ts",
+      "notes": "非串流與串流路徑的 settleQuota 後均加入 fire-and-forget checkAndNotifyQuota"
+    },
+    {
+      "id": "T5",
+      "title": "前端 Webhook 設定頁",
+      "status": "completed",
+      "file": "packages/web-admin/src/app/portal/settings/webhooks/page.tsx",
+      "notes": "URL 輸入、Secret、儲存、測試按鈕、推播記錄列表；加入 portal layout 導覽"
+    },
+    {
+      "id": "T6",
+      "title": "測試",
+      "status": "completed",
+      "files": [
+        "packages/api-server/src/services/__tests__/WebhookService.test.ts",
+        "packages/api-server/src/__tests__/webhook.test.ts"
+      ],
+      "notes": "WebhookService 18 個測試、webhook routes 8 個測試，全部通過（214/214）"
+    }
+  ],
+
+  "test_results": {
+    "total": 214,
+    "passed": 214,
+    "failed": 0,
+    "command": "pnpm --filter @apiex/api-server test"
+  },
+
+  "commits": [
+    {
+      "message": "test(red): webhook notification failing tests",
+      "files": [
+        "packages/api-server/src/services/__tests__/WebhookService.test.ts",
+        "packages/api-server/src/__tests__/webhook.test.ts"
+      ]
+    },
+    {
+      "message": "feat(green): webhook notification — DB + service + routes + proxy",
+      "files": [
+        "packages/api-server/supabase/migrations/20260315200000_webhook.sql",
+        "packages/api-server/src/services/WebhookService.ts",
+        "packages/api-server/src/routes/webhooks.ts",
+        "packages/api-server/src/index.ts",
+        "packages/api-server/src/routes/proxy.ts"
+      ]
+    },
+    {
+      "message": "feat: webhook settings UI page",
+      "files": [
+        "packages/web-admin/src/app/portal/settings/webhooks/page.tsx",
+        "packages/web-admin/src/app/portal/layout.tsx"
+      ]
+    }
+  ]
+}
