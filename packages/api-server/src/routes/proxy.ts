@@ -4,6 +4,7 @@ import { RouterService } from '../services/RouterService.js'
 import { KeyService } from '../services/KeyService.js'
 import { RatesService } from '../services/RatesService.js'
 import { UsageLogger, type UsageLogEntry } from '../services/UsageLogger.js'
+import { WebhookService } from '../services/WebhookService.js'
 import { InsufficientQuotaError, Errors } from '../lib/errors.js'
 import type { OpenAIRequest } from '../adapters/types.js'
 import { supabaseAdmin } from '../lib/supabase.js'
@@ -24,6 +25,7 @@ export function proxyRoutes() {
   const keyService = new KeyService()
   const ratesService = new RatesService()
   const usageLogger = new UsageLogger()
+  const webhookService = new WebhookService()
 
   /**
    * POST /chat/completions
@@ -40,6 +42,8 @@ export function proxyRoutes() {
    */
   router.post('/chat/completions', async (c) => {
     const apiKeyId = c.get('apiKeyId') as string
+    const userId = c.get('userId') as string
+    const apiKeyRecord = c.get('apiKey') as Record<string, unknown>
     const body = await c.req.json<OpenAIRequest>()
     const isStream = body.stream === true
     const estimatedTokens = body.max_tokens ?? 4096
@@ -109,6 +113,12 @@ export function proxyRoutes() {
           }
         }).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
 
+        // Quota warning webhook (fire-and-forget)
+        const quotaTokens = apiKeyRecord.quota_tokens as number
+        if (quotaTokens > 0) {
+          webhookService.checkAndNotifyQuota(userId, apiKeyId, quotaTokens, usage.total_tokens).catch(() => {})
+        }
+
         return c.json(result.data)
       }
 
@@ -157,6 +167,12 @@ export function proxyRoutes() {
               keyService.recordSpend(apiKeyId, costCents).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
             }
           }).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
+
+          // Quota warning webhook (fire-and-forget)
+          const quotaTokens = apiKeyRecord.quota_tokens as number
+          if (quotaTokens > 0) {
+            webhookService.checkAndNotifyQuota(userId, apiKeyId, quotaTokens, usage.total_tokens).catch(() => {})
+          }
         }
       })
     } catch (err) {
