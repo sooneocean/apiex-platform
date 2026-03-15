@@ -19,6 +19,25 @@ vi.mock('../../services/KeyService.js', () => ({
   KeyService: vi.fn().mockImplementation(() => ({})),
 }))
 
+// Helper: build a full Supabase chain stub ending in a resolved value
+function makeSupabaseChain(resolvedValue: unknown) {
+  const terminal = {
+    select: vi.fn(),
+    single: vi.fn().mockResolvedValue(resolvedValue),
+    order: vi.fn(),
+    eq: vi.fn(),
+    insert: vi.fn(),
+    update: vi.fn(),
+  }
+  // Make every chainable method return terminal so any chain works
+  Object.keys(terminal).forEach((k) => {
+    if (k !== 'single') {
+      (terminal as Record<string, unknown>)[k] = vi.fn().mockReturnValue(terminal)
+    }
+  })
+  return terminal
+}
+
 const { adminRoutes } = await import('../admin.js')
 
 describe('Admin Route — T12', () => {
@@ -138,6 +157,206 @@ describe('Admin Route — T12', () => {
       expect(body.data).toHaveLength(1)
       expect(body.data[0].model_tag).toBe('apex-smart')
       expect(body.pagination).toBeDefined()
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // Models (route_config) endpoints — T6
+  // ---------------------------------------------------------------------------
+
+  describe('GET /admin/models', () => {
+    it('should return all route_config records including inactive', async () => {
+      const mockModels = [
+        {
+          id: 'rc-1',
+          tag: 'apex-cheap',
+          upstream_provider: 'google',
+          upstream_model: 'gemini-2.0-flash',
+          upstream_base_url: 'https://generativelanguage.googleapis.com/v1beta/openai',
+          is_active: true,
+          updated_at: '2026-03-15T00:00:00Z',
+        },
+        {
+          id: 'rc-2',
+          tag: 'apex-smart',
+          upstream_provider: 'anthropic',
+          upstream_model: 'claude-opus-4-6',
+          upstream_base_url: 'https://api.anthropic.com',
+          is_active: false,
+          updated_at: '2026-03-14T00:00:00Z',
+        },
+      ]
+
+      const chain = {
+        select: vi.fn().mockReturnThis(),
+        order: vi.fn().mockReturnThis(),
+      }
+      // Second order() call resolves
+      chain.order = vi.fn()
+        .mockReturnValueOnce(chain)
+        .mockResolvedValueOnce({ data: mockModels, error: null })
+
+      mockFrom.mockReturnValueOnce(chain)
+
+      const res = await app.request('/admin/models')
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data).toHaveLength(2)
+      expect(body.data[0].tag).toBe('apex-cheap')
+    })
+  })
+
+  describe('POST /admin/models', () => {
+    it('should create a new route_config and return 201', async () => {
+      const newModel = {
+        id: 'rc-new',
+        tag: 'apex-test',
+        upstream_provider: 'anthropic',
+        upstream_model: 'claude-3-5-haiku',
+        upstream_base_url: 'https://api.anthropic.com',
+        is_active: true,
+        updated_at: '2026-03-15T10:00:00Z',
+      }
+
+      const insertChain = {
+        insert: vi.fn().mockReturnThis(),
+        select: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({ data: newModel, error: null }),
+      }
+      mockFrom.mockReturnValueOnce(insertChain)
+
+      const res = await app.request('/admin/models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tag: 'apex-test',
+          upstream_provider: 'anthropic',
+          upstream_model: 'claude-3-5-haiku',
+          upstream_base_url: 'https://api.anthropic.com',
+        }),
+      })
+
+      expect(res.status).toBe(201)
+      const body = await res.json()
+      expect(body.data.tag).toBe('apex-test')
+      expect(body.data.id).toBe('rc-new')
+    })
+
+    it('should return 409 when tag already exists as active route', async () => {
+      const insertChain = {
+        insert: vi.fn().mockReturnThis(),
+        select: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({
+          data: null,
+          error: { code: '23505', message: 'duplicate key value violates unique constraint' },
+        }),
+      }
+      mockFrom.mockReturnValueOnce(insertChain)
+
+      const res = await app.request('/admin/models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tag: 'apex-smart',
+          upstream_provider: 'anthropic',
+          upstream_model: 'claude-opus-4-6',
+          upstream_base_url: 'https://api.anthropic.com',
+        }),
+      })
+
+      expect(res.status).toBe(409)
+      const body = await res.json()
+      expect(body.error.code).toBe('conflict')
+    })
+
+    it('should return 400 when required fields are missing', async () => {
+      const res = await app.request('/admin/models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tag: 'apex-test' }),
+      })
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.error.code).toBe('invalid_parameter')
+    })
+  })
+
+  describe('PATCH /admin/models/:id', () => {
+    it('should update an existing route_config and return 200', async () => {
+      const updatedModel = {
+        id: 'rc-1',
+        tag: 'apex-smart',
+        upstream_provider: 'google',
+        upstream_model: 'gemini-2.0-flash',
+        upstream_base_url: 'https://generativelanguage.googleapis.com/v1beta/openai',
+        is_active: true,
+        updated_at: '2026-03-15T12:00:00Z',
+      }
+
+      const updateChain = {
+        update: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        select: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({ data: updatedModel, error: null }),
+      }
+      mockFrom.mockReturnValueOnce(updateChain)
+
+      const res = await app.request('/admin/models/rc-1', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ upstream_provider: 'google' }),
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data.upstream_provider).toBe('google')
+    })
+
+    it('should return 404 when route_config record does not exist', async () => {
+      const updateChain = {
+        update: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        select: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({
+          data: null,
+          error: { code: 'PGRST116', message: 'JSON object requested, multiple (or no) rows returned' },
+        }),
+      }
+      mockFrom.mockReturnValueOnce(updateChain)
+
+      const res = await app.request('/admin/models/nonexistent-id', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: false }),
+      })
+
+      expect(res.status).toBe(404)
+      const body = await res.json()
+      expect(body.error.code).toBe('not_found')
+    })
+
+    it('should return 409 when update causes duplicate active tag', async () => {
+      const updateChain = {
+        update: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        select: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({
+          data: null,
+          error: { code: '23505', message: 'duplicate key value violates unique constraint' },
+        }),
+      }
+      mockFrom.mockReturnValueOnce(updateChain)
+
+      const res = await app.request('/admin/models/rc-2', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: true }),
+      })
+
+      expect(res.status).toBe(409)
+      const body = await res.json()
+      expect(body.error.code).toBe('conflict')
     })
   })
 

@@ -3,6 +3,7 @@ import { supabaseAdmin } from '../lib/supabase.js'
 import { Errors } from '../lib/errors.js'
 import { AggregationService } from '../services/AggregationService.js'
 import { RatesService } from '../services/RatesService.js'
+import { RouteConfigService } from '../services/RouteConfigService.js'
 import type { Period } from '../services/AggregationService.js'
 
 const VALID_PERIODS: Period[] = ['24h', '7d', '30d']
@@ -20,6 +21,7 @@ export function adminRoutes() {
   const router = new Hono()
   const aggregationSvc = new AggregationService()
   const ratesSvc = new RatesService()
+  const routeConfigSvc = new RouteConfigService()
 
   /**
    * GET /admin/users — List all users with quota info
@@ -368,6 +370,145 @@ export function adminRoutes() {
         return Errors.notFound()
       }
       console.error('admin update rate error:', err)
+      return Errors.internalError()
+    }
+  })
+
+  // ---------------------------------------------------------------------------
+  // Admin Models (route_config) endpoints
+  // ---------------------------------------------------------------------------
+
+  /**
+   * GET /admin/models — List all route_config records (including inactive)
+   */
+  router.get('/models', async (c) => {
+    try {
+      const models = await routeConfigSvc.listAll()
+      return c.json({ data: models })
+    } catch (err) {
+      console.error('admin models list error:', err)
+      return Errors.internalError()
+    }
+  })
+
+  /**
+   * POST /admin/models — Create a new route_config record
+   */
+  router.post('/models', async (c) => {
+    const body = await c.req.json<{
+      tag?: string
+      upstream_provider?: string
+      upstream_model?: string
+      upstream_base_url?: string
+      is_active?: boolean
+    }>()
+
+    if (!body.tag || typeof body.tag !== 'string' || body.tag.trim() === '') {
+      return Errors.invalidParam('tag is required')
+    }
+    if (!body.upstream_provider || typeof body.upstream_provider !== 'string' || body.upstream_provider.trim() === '') {
+      return Errors.invalidParam('upstream_provider is required')
+    }
+    if (!body.upstream_model || typeof body.upstream_model !== 'string' || body.upstream_model.trim() === '') {
+      return Errors.invalidParam('upstream_model is required')
+    }
+    if (!body.upstream_base_url || typeof body.upstream_base_url !== 'string' || body.upstream_base_url.trim() === '') {
+      return Errors.invalidParam('upstream_base_url is required')
+    }
+
+    try {
+      const model = await routeConfigSvc.create({
+        tag: body.tag.trim(),
+        upstream_provider: body.upstream_provider.trim(),
+        upstream_model: body.upstream_model.trim(),
+        upstream_base_url: body.upstream_base_url.trim(),
+        is_active: body.is_active,
+      })
+      return c.json({ data: model }, 201)
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message === 'conflict') {
+        return new Response(
+          JSON.stringify({
+            error: {
+              message: `An active route with tag '${body.tag}' already exists.`,
+              type: 'invalid_request_error',
+              code: 'conflict',
+            },
+          }),
+          { status: 409, headers: { 'Content-Type': 'application/json' } }
+        )
+      }
+      console.error('admin create model error:', err)
+      return Errors.internalError()
+    }
+  })
+
+  /**
+   * PATCH /admin/models/:id — Update an existing route_config record
+   */
+  router.patch('/models/:id', async (c) => {
+    const id = c.req.param('id')
+    const body = await c.req.json<{
+      tag?: string
+      upstream_provider?: string
+      upstream_model?: string
+      upstream_base_url?: string
+      is_active?: boolean
+    }>()
+
+    // Validate at least one field is provided
+    const hasUpdate = [
+      body.tag,
+      body.upstream_provider,
+      body.upstream_model,
+      body.upstream_base_url,
+      body.is_active,
+    ].some((v) => v !== undefined)
+
+    if (!hasUpdate) {
+      return Errors.invalidParam('At least one field must be provided for update')
+    }
+
+    // Validate non-empty string fields if provided
+    if (body.tag !== undefined && (typeof body.tag !== 'string' || body.tag.trim() === '')) {
+      return Errors.invalidParam('tag must be a non-empty string')
+    }
+    if (body.upstream_provider !== undefined && (typeof body.upstream_provider !== 'string' || body.upstream_provider.trim() === '')) {
+      return Errors.invalidParam('upstream_provider must be a non-empty string')
+    }
+    if (body.upstream_model !== undefined && (typeof body.upstream_model !== 'string' || body.upstream_model.trim() === '')) {
+      return Errors.invalidParam('upstream_model must be a non-empty string')
+    }
+    if (body.upstream_base_url !== undefined && (typeof body.upstream_base_url !== 'string' || body.upstream_base_url.trim() === '')) {
+      return Errors.invalidParam('upstream_base_url must be a non-empty string')
+    }
+
+    try {
+      const model = await routeConfigSvc.update(id, {
+        ...(body.tag !== undefined ? { tag: body.tag.trim() } : {}),
+        ...(body.upstream_provider !== undefined ? { upstream_provider: body.upstream_provider.trim() } : {}),
+        ...(body.upstream_model !== undefined ? { upstream_model: body.upstream_model.trim() } : {}),
+        ...(body.upstream_base_url !== undefined ? { upstream_base_url: body.upstream_base_url.trim() } : {}),
+        ...(body.is_active !== undefined ? { is_active: body.is_active } : {}),
+      })
+      return c.json({ data: model })
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message === 'not_found') {
+        return Errors.notFound()
+      }
+      if (err instanceof Error && err.message === 'conflict') {
+        return new Response(
+          JSON.stringify({
+            error: {
+              message: `An active route with the same tag already exists.`,
+              type: 'invalid_request_error',
+              code: 'conflict',
+            },
+          }),
+          { status: 409, headers: { 'Content-Type': 'application/json' } }
+        )
+      }
+      console.error('admin update model error:', err)
       return Errors.internalError()
     }
   })

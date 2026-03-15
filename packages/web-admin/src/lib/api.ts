@@ -444,3 +444,36 @@ export function makeRatesApi(token: string) {
       apiPatch<{ data: ModelRate }>(`/admin/rates/${id}`, data, token, signal),
   };
 }
+
+// ─── Route Config (Models) Types ──────────────────────────────────────────────
+
+export interface RouteConfig {
+  id: string;
+  tag: string;
+  upstream_provider: string;
+  upstream_model: string;
+  upstream_base_url: string;
+  is_active: boolean;
+  updated_at: string;
+}
+
+export interface RouteConfigCreate {
+  tag: string;
+  upstream_provider: string;
+  upstream_model: string;
+  upstream_base_url: string;
+  is_active?: boolean;
+}
+
+// ─── Models API Factory ───────────────────────────────────────────────────────
+
+export function makeModelsApi(token: string) {
+  return {
+    list: (signal?: AbortSignal) =>
+      apiGet<{ data: RouteConfig[] }>("/admin/models", token, signal),
+    create: (data: RouteConfigCreate, signal?: AbortSignal) =>
+      apiPost<{ data: RouteConfig }>("/admin/models", data, token, signal),
+    update: (id: string, data: Partial<RouteConfigCreate>, signal?: AbortSignal) =>
+      apiPatch<{ data: RouteConfig }>(`/admin/models/${id}`, data, token, signal),
+  };
+}
