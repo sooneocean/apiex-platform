@@ -844,5 +844,308 @@ export function adminRoutes() {
     })
   })
 
+  // ---------------------------------------------------------------------------
+  // Admin Rate Limits endpoints
+  // ---------------------------------------------------------------------------
+
+  /**
+   * GET /admin/rate-limits/tiers — List all tiers
+   */
+  router.get('/rate-limits/tiers', async (c) => {
+    const { data, error } = await supabaseAdmin
+      .from('rate_limit_tiers')
+      .select('*')
+      .order('created_at', { ascending: true })
+
+    if (error) {
+      console.error('list tiers error:', error)
+      return Errors.internalError()
+    }
+    return c.json({ data: data ?? [] })
+  })
+
+  /**
+   * POST /admin/rate-limits/tiers — Create a new tier
+   */
+  router.post('/rate-limits/tiers', async (c) => {
+    const body = await c.req.json<{ tier?: string; rpm?: number; tpm?: number }>()
+
+    if (!body.tier || typeof body.tier !== 'string' || body.tier.trim() === '') {
+      return Errors.invalidParam('tier is required')
+    }
+    if (body.rpm == null || typeof body.rpm !== 'number' || !Number.isInteger(body.rpm) || body.rpm < -1) {
+      return Errors.invalidParam('rpm must be an integer >= -1')
+    }
+    if (body.tpm == null || typeof body.tpm !== 'number' || !Number.isInteger(body.tpm) || body.tpm < -1) {
+      return Errors.invalidParam('tpm must be an integer >= -1')
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('rate_limit_tiers')
+      .insert({ tier: body.tier.trim(), rpm: body.rpm, tpm: body.tpm })
+      .select()
+      .single()
+
+    if (error) {
+      if (error.code === '23505') {
+        return c.json(
+          { error: { message: `Tier '${body.tier}' already exists.`, type: 'invalid_request_error', code: 'conflict' } },
+          409
+        )
+      }
+      console.error('create tier error:', error)
+      return Errors.internalError()
+    }
+
+    return c.json({ data }, 201)
+  })
+
+  /**
+   * PATCH /admin/rate-limits/tiers/:tier — Update a tier
+   */
+  router.patch('/rate-limits/tiers/:tier', async (c) => {
+    const tier = c.req.param('tier')
+    const body = await c.req.json<{ rpm?: number; tpm?: number }>()
+
+    if (body.rpm === undefined && body.tpm === undefined) {
+      return Errors.invalidParam('At least one of rpm or tpm must be provided')
+    }
+    if (body.rpm !== undefined && (typeof body.rpm !== 'number' || !Number.isInteger(body.rpm) || body.rpm < -1)) {
+      return Errors.invalidParam('rpm must be an integer >= -1')
+    }
+    if (body.tpm !== undefined && (typeof body.tpm !== 'number' || !Number.isInteger(body.tpm) || body.tpm < -1)) {
+      return Errors.invalidParam('tpm must be an integer >= -1')
+    }
+
+    const updates: Record<string, number> = {}
+    if (body.rpm !== undefined) updates.rpm = body.rpm
+    if (body.tpm !== undefined) updates.tpm = body.tpm
+
+    const { data, error } = await supabaseAdmin
+      .from('rate_limit_tiers')
+      .update(updates)
+      .eq('tier', tier)
+      .select()
+      .single()
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return Errors.notFound()
+      }
+      console.error('update tier error:', error)
+      return Errors.internalError()
+    }
+
+    if (!data) {
+      return Errors.notFound()
+    }
+
+    return c.json({ data })
+  })
+
+  /**
+   * DELETE /admin/rate-limits/tiers/:tier — Delete a tier
+   */
+  router.delete('/rate-limits/tiers/:tier', async (c) => {
+    const tier = c.req.param('tier')
+
+    // Verify tier exists
+    const { data: existing, error: fetchError } = await supabaseAdmin
+      .from('rate_limit_tiers')
+      .select('tier')
+      .eq('tier', tier)
+      .single()
+
+    if (fetchError || !existing) {
+      return Errors.notFound()
+    }
+
+    // Check if any active api_keys reference this tier
+    const { count, error: countError } = await supabaseAdmin
+      .from('api_keys')
+      .select('id', { count: 'exact', head: true })
+      .eq('rate_limit_tier', tier)
+      .eq('status', 'active')
+
+    if (countError) {
+      console.error('check tier usage error:', countError)
+      return Errors.internalError()
+    }
+
+    if (count && count > 0) {
+      return c.json(
+        {
+          error: {
+            message: `Cannot delete tier '${tier}': ${count} API key(s) are still using this tier.`,
+            type: 'invalid_request_error',
+            code: 'conflict',
+          },
+        },
+        409
+      )
+    }
+
+    const { error: deleteError } = await supabaseAdmin
+      .from('rate_limit_tiers')
+      .delete()
+      .eq('tier', tier)
+
+    if (deleteError) {
+      console.error('delete tier error:', deleteError)
+      return Errors.internalError()
+    }
+
+    return c.json({ data: { tier, deleted: true } })
+  })
+
+  /**
+   * GET /admin/rate-limits/overrides — List all model overrides (optional ?tier= filter)
+   */
+  router.get('/rate-limits/overrides', async (c) => {
+    let query = supabaseAdmin
+      .from('model_rate_overrides')
+      .select('*')
+      .order('created_at', { ascending: true })
+
+    const tierFilter = c.req.query('tier')
+    if (tierFilter) query = query.eq('tier', tierFilter)
+
+    const { data, error } = await query
+    if (error) {
+      console.error('list overrides error:', error)
+      return Errors.internalError()
+    }
+    return c.json({ data: data ?? [] })
+  })
+
+  /**
+   * POST /admin/rate-limits/overrides — Create a new model override
+   */
+  router.post('/rate-limits/overrides', async (c) => {
+    const body = await c.req.json<{ tier?: string; model_tag?: string; rpm?: number; tpm?: number }>()
+
+    if (!body.tier || typeof body.tier !== 'string' || body.tier.trim() === '') {
+      return Errors.invalidParam('tier is required')
+    }
+    if (!body.model_tag || typeof body.model_tag !== 'string' || body.model_tag.trim() === '') {
+      return Errors.invalidParam('model_tag is required')
+    }
+    if (body.rpm == null || typeof body.rpm !== 'number' || !Number.isInteger(body.rpm) || body.rpm < -1) {
+      return Errors.invalidParam('rpm must be an integer >= -1')
+    }
+    if (body.tpm == null || typeof body.tpm !== 'number' || !Number.isInteger(body.tpm) || body.tpm < -1) {
+      return Errors.invalidParam('tpm must be an integer >= -1')
+    }
+
+    // Validate tier exists
+    const { data: tierData, error: tierError } = await supabaseAdmin
+      .from('rate_limit_tiers')
+      .select('tier')
+      .eq('tier', body.tier.trim())
+      .single()
+
+    if (tierError || !tierData) {
+      return Errors.notFound()
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('model_rate_overrides')
+      .insert({ tier: body.tier.trim(), model_tag: body.model_tag.trim(), rpm: body.rpm, tpm: body.tpm })
+      .select()
+      .single()
+
+    if (error) {
+      if (error.code === '23505') {
+        return c.json(
+          {
+            error: {
+              message: `Override for tier '${body.tier}' + model '${body.model_tag}' already exists.`,
+              type: 'invalid_request_error',
+              code: 'conflict',
+            },
+          },
+          409
+        )
+      }
+      console.error('create override error:', error)
+      return Errors.internalError()
+    }
+
+    return c.json({ data }, 201)
+  })
+
+  /**
+   * PATCH /admin/rate-limits/overrides/:id — Update a model override
+   */
+  router.patch('/rate-limits/overrides/:id', async (c) => {
+    const id = c.req.param('id')
+    const body = await c.req.json<{ rpm?: number; tpm?: number }>()
+
+    if (body.rpm === undefined && body.tpm === undefined) {
+      return Errors.invalidParam('At least one of rpm or tpm must be provided')
+    }
+    if (body.rpm !== undefined && (typeof body.rpm !== 'number' || !Number.isInteger(body.rpm) || body.rpm < -1)) {
+      return Errors.invalidParam('rpm must be an integer >= -1')
+    }
+    if (body.tpm !== undefined && (typeof body.tpm !== 'number' || !Number.isInteger(body.tpm) || body.tpm < -1)) {
+      return Errors.invalidParam('tpm must be an integer >= -1')
+    }
+
+    const updates: Record<string, number> = {}
+    if (body.rpm !== undefined) updates.rpm = body.rpm
+    if (body.tpm !== undefined) updates.tpm = body.tpm
+
+    const { data, error } = await supabaseAdmin
+      .from('model_rate_overrides')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return Errors.notFound()
+      }
+      console.error('update override error:', error)
+      return Errors.internalError()
+    }
+
+    if (!data) {
+      return Errors.notFound()
+    }
+
+    return c.json({ data })
+  })
+
+  /**
+   * DELETE /admin/rate-limits/overrides/:id — Delete a model override
+   */
+  router.delete('/rate-limits/overrides/:id', async (c) => {
+    const id = c.req.param('id')
+
+    // Verify override exists
+    const { data: existing, error: fetchError } = await supabaseAdmin
+      .from('model_rate_overrides')
+      .select('id')
+      .eq('id', id)
+      .single()
+
+    if (fetchError || !existing) {
+      return Errors.notFound()
+    }
+
+    const { error: deleteError } = await supabaseAdmin
+      .from('model_rate_overrides')
+      .delete()
+      .eq('id', id)
+
+    if (deleteError) {
+      console.error('delete override error:', deleteError)
+      return Errors.internalError()
+    }
+
+    return c.json({ data: { id, deleted: true } })
+  })
+
   return router
 }
