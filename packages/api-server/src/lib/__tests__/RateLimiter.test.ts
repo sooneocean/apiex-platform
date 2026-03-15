@@ -1,5 +1,6 @@
 /**
  * T3 TDD — RateLimiter 測試（9 test cases）
+ * T6 TDD — RateLimiter 擴展測試（Redis backend, fallback, model override）
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
@@ -15,7 +16,25 @@ vi.mock('../supabase.js', () => ({
   },
 }))
 
-const { RateLimiter } = await import('../RateLimiter.js')
+// Mock @upstash/redis
+const mockPipelineExec = vi.fn()
+const mockPipeline = {
+  zadd: vi.fn().mockReturnThis(),
+  zremrangebyscore: vi.fn().mockReturnThis(),
+  zcard: vi.fn().mockReturnThis(),
+  zrangebyscore: vi.fn().mockReturnThis(),
+  expire: vi.fn().mockReturnThis(),
+  exec: mockPipelineExec,
+}
+const mockRedisPipeline = vi.fn().mockReturnValue(mockPipeline)
+const mockRedisInstance = { pipeline: mockRedisPipeline }
+const MockRedis = vi.fn().mockReturnValue(mockRedisInstance)
+
+vi.mock('@upstash/redis', () => ({
+  Redis: MockRedis,
+}))
+
+const { RateLimiter, RedisCounterBackend, MemoryCounterBackend, createRateLimiter } = await import('../RateLimiter.js')
 
 describe('RateLimiter — T3', () => {
   let rateLimiter: InstanceType<typeof RateLimiter>
@@ -164,5 +183,199 @@ describe('RateLimiter — T3', () => {
     expect(config.tier).toBe('free')
     expect(config.rpm).toBe(20)
     expect(config.tpm).toBe(100000)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// T6: RedisCounterBackend 測試
+// ---------------------------------------------------------------------------
+
+describe('RedisCounterBackend — T6', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockRedisPipeline.mockReturnValue(mockPipeline)
+    mockPipeline.zadd.mockReturnThis()
+    mockPipeline.zremrangebyscore.mockReturnThis()
+    mockPipeline.zcard.mockReturnThis()
+    mockPipeline.zrangebyscore.mockReturnThis()
+    mockPipeline.expire.mockReturnThis()
+  })
+
+  it('getCounts 應透過 pipeline 查詢 RPM 和 TPM', async () => {
+    // results[0]=zremrangebyscore rpm, [1]=zremrangebyscore tpm, [2]=zcard=5, [3]=zrangebyscore members
+    mockPipelineExec.mockResolvedValue([undefined, undefined, 5, ['1234:abc:100', '1235:def:200']])
+
+    const backend = new RedisCounterBackend(mockRedisInstance as never)
+    const result = await backend.getCounts('test-key')
+
+    expect(result.rpm).toBe(5)
+    expect(result.tpm).toBe(300)
+    expect(mockRedisPipeline).toHaveBeenCalledTimes(1)
+    expect(mockPipeline.zcard).toHaveBeenCalledOnce()
+    expect(mockPipeline.zrangebyscore).toHaveBeenCalledOnce()
+  })
+
+  it('recordRequest 應使用 ZADD + EXPIRE pipeline', async () => {
+    mockPipelineExec.mockResolvedValue([undefined, undefined, undefined, undefined])
+
+    const backend = new RedisCounterBackend(mockRedisInstance as never)
+    await backend.recordRequest('test-key', 500)
+
+    expect(mockPipeline.zadd).toHaveBeenCalledTimes(2) // rpm + tpm
+    expect(mockPipeline.expire).toHaveBeenCalledTimes(2) // rpm + tpm
+    expect(mockPipelineExec).toHaveBeenCalledOnce()
+  })
+
+  it('correctTokens delta=0 時不呼叫 Redis', async () => {
+    const backend = new RedisCounterBackend(mockRedisInstance as never)
+    await backend.correctTokens('test-key', 100, 100)
+
+    expect(mockRedisPipeline).not.toHaveBeenCalled()
+    expect(mockPipelineExec).not.toHaveBeenCalled()
+  })
+
+  it('correctTokens delta!=0 時應記錄修正 entry', async () => {
+    mockPipelineExec.mockResolvedValue([undefined, undefined])
+
+    const backend = new RedisCounterBackend(mockRedisInstance as never)
+    await backend.correctTokens('test-key', 100, 150)
+
+    expect(mockPipeline.zadd).toHaveBeenCalledOnce()
+    expect(mockPipeline.expire).toHaveBeenCalledOnce()
+    expect(mockPipelineExec).toHaveBeenCalledOnce()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// T6: Fallback 降級測試
+// ---------------------------------------------------------------------------
+
+describe('Fallback 降級 — T6', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockEq.mockReturnValue({ single: mockSingle })
+    mockSelect.mockReturnValue({ eq: mockEq })
+    mockFrom.mockReturnValue({ select: mockSelect })
+    mockSingle.mockResolvedValue({ data: { tier: 'free', rpm: 20, tpm: 100000 }, error: null })
+  })
+
+  it('UPSTASH_REDIS_REST_URL 未設定時使用 MemoryCounterBackend', () => {
+    const originalUrl = process.env.UPSTASH_REDIS_REST_URL
+    const originalToken = process.env.UPSTASH_REDIS_REST_TOKEN
+    delete process.env.UPSTASH_REDIS_REST_URL
+    delete process.env.UPSTASH_REDIS_REST_TOKEN
+
+    const limiter = createRateLimiter()
+    // 驗證行為：MemoryCounterBackend 不呼叫 Redis
+    expect(limiter).toBeInstanceOf(RateLimiter)
+    expect(MockRedis).not.toHaveBeenCalled()
+
+    process.env.UPSTASH_REDIS_REST_URL = originalUrl
+    process.env.UPSTASH_REDIS_REST_TOKEN = originalToken
+  })
+
+  it('Redis 操作失敗時應降級至 Memory + console.warn', async () => {
+    const errorBackend: import('../RateLimiter.js').CounterBackend = {
+      getCounts: vi.fn().mockRejectedValue(new Error('Redis connection failed')),
+      recordRequest: vi.fn().mockRejectedValue(new Error('Redis connection failed')),
+      correctTokens: vi.fn().mockResolvedValue(undefined),
+    }
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const limiter = new RateLimiter(errorBackend)
+
+    // check() should not throw despite backend error
+    const result = await limiter.check('key-fallback', 'free', 100)
+
+    expect(result).toBeDefined()
+    expect(result.allowed).toBeDefined()
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[RateLimiter]'),
+      expect.anything(),
+    )
+
+    warnSpy.mockRestore()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// T6: Model Override 測試
+// ---------------------------------------------------------------------------
+
+describe('Model Override — T6', () => {
+  // Helper to build a two-table mock: rate_limit_tiers + model_rate_overrides
+  // rate_limit_tiers: .select().eq('tier', tier).single()          — 1 eq
+  // model_rate_overrides: .select().eq('tier', t).eq('model_tag', m).single() — 2 eqs
+  function setupTwoTableMock(
+    tierData: { tier: string; rpm: number; tpm: number },
+    overrideData: { rpm: number; tpm: number } | null,
+  ) {
+    const tierSingle = vi.fn().mockResolvedValue({ data: tierData, error: null })
+    const tierEq1 = vi.fn().mockReturnValue({ single: tierSingle })
+    const tierSelect = vi.fn().mockReturnValue({ eq: tierEq1 })
+
+    const overrideSingle = vi.fn().mockResolvedValue({
+      data: overrideData,
+      error: overrideData ? null : { message: 'not found' },
+    })
+    const overrideEq2 = vi.fn().mockReturnValue({ single: overrideSingle })
+    const overrideEq1 = vi.fn().mockReturnValue({ eq: overrideEq2 })
+    const overrideSelect = vi.fn().mockReturnValue({ eq: overrideEq1 })
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'rate_limit_tiers') return { select: tierSelect }
+      if (table === 'model_rate_overrides') return { select: overrideSelect }
+      return { select: vi.fn() }
+    })
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('有 model override 時應使用 model-specific RPM/TPM limits', async () => {
+    setupTwoTableMock(
+      { tier: 'pro', rpm: 60, tpm: 500000 },
+      { rpm: 10, tpm: 50000 },
+    )
+
+    const limiter = new RateLimiter()
+    const result = await limiter.check('key-override', 'pro', 100, 'gpt-4')
+
+    expect(result.allowed).toBe(true)
+    expect(result.limits.rpm).toBe(10)
+    expect(result.limits.tpm).toBe(50000)
+  })
+
+  it('無 model override 時應 fallback 到 tier 預設值', async () => {
+    setupTwoTableMock(
+      { tier: 'pro', rpm: 60, tpm: 500000 },
+      null,
+    )
+
+    const limiter = new RateLimiter()
+    const result = await limiter.check('key-no-override', 'pro', 100, 'gpt-3.5')
+
+    expect(result.allowed).toBe(true)
+    expect(result.limits.rpm).toBe(60)
+    expect(result.limits.tpm).toBe(500000)
+  })
+
+  it('model 參數缺失時應使用 tier 預設值（向後相容）', async () => {
+    mockSingle.mockResolvedValue({ data: { tier: 'pro', rpm: 60, tpm: 500000 }, error: null })
+    mockEq.mockReturnValue({ single: mockSingle })
+    mockSelect.mockReturnValue({ eq: mockEq })
+    mockFrom.mockReturnValue({ select: mockSelect })
+
+    const limiter = new RateLimiter()
+    // No model argument
+    const result = await limiter.check('key-no-model', 'pro', 100)
+
+    expect(result.allowed).toBe(true)
+    expect(result.limits.rpm).toBe(60)
+    expect(result.limits.tpm).toBe(500000)
+    // model_rate_overrides should NOT have been queried
+    expect(mockFrom).toHaveBeenCalledWith('rate_limit_tiers')
+    expect(mockFrom).not.toHaveBeenCalledWith('model_rate_overrides')
   })
 })

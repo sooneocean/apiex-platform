@@ -150,3 +150,42 @@ describe('rateLimitMiddleware — T9', () => {
     expect(res.headers.get('X-RateLimit-Remaining-Tokens')).toBeNull()
   })
 })
+
+// ---------------------------------------------------------------------------
+// T6: model 參數傳遞測試
+// ---------------------------------------------------------------------------
+
+describe('model 參數傳遞 — T6', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockCheck.mockResolvedValue({
+      allowed: true,
+      limits: { rpm: 60, tpm: 500_000 },
+      remaining: { rpm: 59, tpm: 495_000 },
+    })
+  })
+
+  it('body.model 有值時應傳入 rateLimiter.check() 第四參數', async () => {
+    const app = buildApp('key-model', 'pro')
+    await app.request('/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ max_tokens: 1024, model: 'gpt-4' }),
+    })
+
+    expect(mockCheck).toHaveBeenCalledOnce()
+    expect(mockCheck).toHaveBeenCalledWith('key-model', 'pro', 1024, 'gpt-4')
+  })
+
+  it('body.model 缺失時 check() 第四參數應為 undefined', async () => {
+    const app = buildApp('key-no-model', 'pro')
+    await app.request('/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ max_tokens: 512 }),
+    })
+
+    expect(mockCheck).toHaveBeenCalledOnce()
+    expect(mockCheck).toHaveBeenCalledWith('key-no-model', 'pro', 512, undefined)
+  })
+})

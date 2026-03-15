@@ -84,7 +84,7 @@ export class MemoryCounterBackend implements CounterBackend {
   }
 }
 
-class RedisCounterBackend implements CounterBackend {
+export class RedisCounterBackend implements CounterBackend {
   private redis: Redis
   private WINDOW_MS = 60_000
   private KEY_TTL = 120 // 2x window
