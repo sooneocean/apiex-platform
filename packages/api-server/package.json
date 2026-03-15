@@ -18,6 +18,7 @@
     "@anthropic-ai/sdk": "^0.39.0",
     "@hono/node-server": "^1.19.11",
     "@supabase/supabase-js": "^2.47.0",
+    "@upstash/redis": "^1.37.0",
     "hono": "^4.6.0",
     "stripe": "^20.4.1"
   },
