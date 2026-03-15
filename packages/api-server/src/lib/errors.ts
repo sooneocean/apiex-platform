@@ -58,6 +58,28 @@ export class ServerError extends ApiError {
   }
 }
 
+export class RateLimitError extends ApiError {
+  public readonly retryAfter: number
+  public readonly rateLimitHeaders: Record<string, string>
+
+  constructor(retryAfter: number, rateLimitHeaders: Record<string, string> = {}) {
+    super('Rate limit exceeded. Please wait before retrying.', 429, 'rate_limit_error', 'rate_limit')
+    this.name = 'RateLimitError'
+    this.retryAfter = retryAfter
+    this.rateLimitHeaders = rateLimitHeaders
+  }
+
+  toResponse(): Response {
+    const body = { error: { message: this.message, type: this.type, code: this.code } }
+    const headers = new Headers({
+      'Content-Type': 'application/json',
+      'Retry-After': String(this.retryAfter),
+      ...this.rateLimitHeaders,
+    })
+    return new Response(JSON.stringify(body), { status: 429, headers })
+  }
+}
+
 // --- Response factory ---
 
 export function makeError(message: string, type: string, code: string, status: number): Response {
@@ -104,8 +126,12 @@ export const Errors = {
   notFound: () =>
     makeError('The requested resource was not found.', 'invalid_request_error', 'not_found', 404),
 
-  rateLimitExceeded: () =>
-    makeError('Rate limit exceeded. Please wait before retrying.', 'rate_limit_error', 'rate_limit', 429),
+  rateLimitExceeded: (retryAfter?: number, rateLimitHeaders?: Record<string, string>) => {
+    if (retryAfter !== undefined) {
+      return new RateLimitError(retryAfter, rateLimitHeaders).toResponse()
+    }
+    return makeError('Rate limit exceeded. Please wait before retrying.', 'rate_limit_error', 'rate_limit', 429)
+  },
 
   invalidPlan: () =>
     makeError('Invalid plan. Valid values: plan_5, plan_10, plan_20.', 'invalid_request_error', 'invalid_plan', 400),
