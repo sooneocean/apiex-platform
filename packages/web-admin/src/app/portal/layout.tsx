@@ -9,6 +9,7 @@ interface PortalLayoutProps {
 }
 
 const navItems = [
+  { href: '/portal/dashboard', label: 'Dashboard' },
   { href: '/portal/topup', label: '儲值' },
   { href: '/portal/logs', label: '充值記錄' },
 ]
