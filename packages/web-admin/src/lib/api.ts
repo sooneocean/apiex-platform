@@ -120,9 +120,14 @@ async function handleResponse<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export async function apiGet<T>(path: string, token: string): Promise<T> {
+export async function apiGet<T>(
+  path: string,
+  token: string,
+  signal?: AbortSignal
+): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
+    signal,
   });
   return handleResponse<T>(res);
 }
@@ -130,7 +135,8 @@ export async function apiGet<T>(path: string, token: string): Promise<T> {
 export async function apiPost<T>(
   path: string,
   body: unknown,
-  token: string
+  token: string,
+  signal?: AbortSignal
 ): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: "POST",
@@ -139,6 +145,7 @@ export async function apiPost<T>(
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
+    signal,
   });
   return handleResponse<T>(res);
 }
@@ -146,7 +153,8 @@ export async function apiPost<T>(
 export async function apiPatch<T>(
   path: string,
   body: unknown,
-  token: string
+  token: string,
+  signal?: AbortSignal
 ): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: "PATCH",
@@ -155,6 +163,7 @@ export async function apiPatch<T>(
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
+    signal,
   });
   return handleResponse<T>(res);
 }
@@ -215,5 +224,217 @@ export function makeKeysApi(token: string) {
     list: () => apiGet<ApiKeysResponse>("/keys", token),
     create: (name: string) => apiPost<CreateKeyResponse>("/keys", { name }, token),
     revoke: (id: string) => apiDelete<{ success: boolean }>(`/keys/${id}`, token),
+  };
+}
+
+// ─── Analytics Types ──────────────────────────────────────────────────────────
+
+export interface AuthMeResponse {
+  data: {
+    id: string;
+    email: string;
+    isAdmin: boolean;
+  };
+}
+
+/** 單一 model 在某時間點的 token 數據 */
+export interface ModelTokenData {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+}
+
+/** 時序資料點（每個 key 是 model_tag，值為 ModelTokenData） */
+export type TimeseriesPoint = {
+  timestamp: string;
+  [modelTag: string]: ModelTokenData | string;
+};
+
+export interface TimeseriesData {
+  period: string;
+  granularity: "hour" | "day";
+  series: TimeseriesPoint[];
+  totals: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+    total_requests: number;
+  };
+}
+
+export interface ModelBreakdownItem {
+  model_tag: string;
+  total_tokens: number;
+  total_requests: number;
+  percentage: number;
+}
+
+export interface ModelBreakdownData {
+  period: string;
+  breakdown: ModelBreakdownItem[];
+}
+
+/** 單一 model 在某時間點的延遲百分位 */
+export interface ModelLatencyData {
+  p50: number;
+  p95: number;
+  p99: number;
+}
+
+/** 延遲時序資料點 */
+export type LatencyPoint = {
+  timestamp: string;
+  [modelTag: string]: ModelLatencyData | string;
+};
+
+export interface LatencyData {
+  period: string;
+  granularity: "hour" | "day";
+  series: LatencyPoint[];
+}
+
+export interface BillingBreakdownItem {
+  model_tag: string;
+  prompt_tokens: number;
+  completion_tokens: number;
+  input_cost_usd: number;
+  output_cost_usd: number;
+  total_cost_usd: number;
+  rate: {
+    input_rate_per_1k: number;
+    output_rate_per_1k: number;
+  };
+}
+
+export interface BillingSummary {
+  period: string;
+  cost: {
+    total_usd: number;
+    breakdown: BillingBreakdownItem[];
+  } | null;
+  quota: {
+    total_quota_tokens: number;
+    is_unlimited: boolean;
+    estimated_days_remaining: number | null;
+    daily_avg_consumption: number;
+  };
+  recent_topups: {
+    id: string;
+    amount_usd: number;
+    tokens_granted: number;
+    created_at: string;
+  }[];
+}
+
+export interface PlatformOverviewData {
+  period: string;
+  total_tokens: number;
+  total_requests: number;
+  active_users: number;
+  avg_latency_ms: number;
+  series: TimeseriesPoint[];
+}
+
+export interface UserRanking {
+  user_id: string;
+  email: string;
+  total_tokens: number;
+  total_requests: number;
+  total_cost_usd: number | null;
+}
+
+export interface TopUsersData {
+  period: string;
+  rankings: UserRanking[];
+}
+
+export interface ModelRate {
+  id: string;
+  model_tag: string;
+  input_rate_per_1k: number;
+  output_rate_per_1k: number;
+  effective_from: string;
+  created_at: string;
+}
+
+export interface ModelRateInsert {
+  model_tag: string;
+  input_rate_per_1k: number;
+  output_rate_per_1k: number;
+  effective_from?: string;
+}
+
+export type Period = "24h" | "7d" | "30d";
+
+// ─── Analytics API Factories ──────────────────────────────────────────────────
+
+export async function authMe(token: string): Promise<AuthMeResponse> {
+  return apiGet<AuthMeResponse>("/auth/me", token);
+}
+
+export function makeAnalyticsApi(token: string) {
+  return {
+    getTimeseries: (params: { period?: Period; key_id?: string }, signal?: AbortSignal) => {
+      const qs = new URLSearchParams();
+      if (params.period) qs.set("period", params.period);
+      if (params.key_id) qs.set("key_id", params.key_id);
+      const query = qs.toString() ? `?${qs.toString()}` : "";
+      return apiGet<{ data: TimeseriesData }>(`/analytics/timeseries${query}`, token, signal);
+    },
+    getModelBreakdown: (params: { period?: Period; key_id?: string }, signal?: AbortSignal) => {
+      const qs = new URLSearchParams();
+      if (params.period) qs.set("period", params.period);
+      if (params.key_id) qs.set("key_id", params.key_id);
+      const query = qs.toString() ? `?${qs.toString()}` : "";
+      return apiGet<{ data: ModelBreakdownData }>(`/analytics/model-breakdown${query}`, token, signal);
+    },
+    getLatency: (params: { period?: Period; key_id?: string }, signal?: AbortSignal) => {
+      const qs = new URLSearchParams();
+      if (params.period) qs.set("period", params.period);
+      if (params.key_id) qs.set("key_id", params.key_id);
+      const query = qs.toString() ? `?${qs.toString()}` : "";
+      return apiGet<{ data: LatencyData }>(`/analytics/latency${query}`, token, signal);
+    },
+    getBilling: (params: { period?: Period }, signal?: AbortSignal) => {
+      const qs = new URLSearchParams();
+      if (params.period) qs.set("period", params.period);
+      const query = qs.toString() ? `?${qs.toString()}` : "";
+      return apiGet<{ data: BillingSummary }>(`/analytics/billing${query}`, token, signal);
+    },
+  };
+}
+
+export function makeAdminAnalyticsApi(token: string) {
+  return {
+    getOverview: (params: { period?: Period }, signal?: AbortSignal) => {
+      const qs = new URLSearchParams();
+      if (params.period) qs.set("period", params.period);
+      const query = qs.toString() ? `?${qs.toString()}` : "";
+      return apiGet<{ data: PlatformOverviewData }>(`/admin/analytics/overview${query}`, token, signal);
+    },
+    getLatency: (params: { period?: Period }, signal?: AbortSignal) => {
+      const qs = new URLSearchParams();
+      if (params.period) qs.set("period", params.period);
+      const query = qs.toString() ? `?${qs.toString()}` : "";
+      return apiGet<{ data: LatencyData }>(`/admin/analytics/latency${query}`, token, signal);
+    },
+    getTopUsers: (params: { period?: Period; limit?: number }, signal?: AbortSignal) => {
+      const qs = new URLSearchParams();
+      if (params.period) qs.set("period", params.period);
+      if (params.limit !== undefined) qs.set("limit", String(params.limit));
+      const query = qs.toString() ? `?${qs.toString()}` : "";
+      return apiGet<{ data: TopUsersData }>(`/admin/analytics/top-users${query}`, token, signal);
+    },
+  };
+}
+
+export function makeRatesApi(token: string) {
+  return {
+    list: (signal?: AbortSignal) =>
+      apiGet<{ data: ModelRate[] }>("/admin/rates", token, signal),
+    create: (data: ModelRateInsert, signal?: AbortSignal) =>
+      apiPost<{ data: ModelRate }>("/admin/rates", data, token, signal),
+    update: (id: string, data: Partial<ModelRateInsert>, signal?: AbortSignal) =>
+      apiPatch<{ data: ModelRate }>(`/admin/rates/${id}`, data, token, signal),
   };
 }
