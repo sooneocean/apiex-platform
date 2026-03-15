@@ -1,5 +1,6 @@
 import { NextIntlClientProvider } from 'next-intl'
 import { getLocale, getMessages } from 'next-intl/server'
+import ReactQueryProvider from '@/components/providers/ReactQueryProvider'
 import "./globals.css";
 
 export const metadata = {
@@ -15,7 +16,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang={locale}>
       <body>
         <NextIntlClientProvider messages={messages}>
-          {children}
+          <ReactQueryProvider>
+            {children}
+          </ReactQueryProvider>
         </NextIntlClientProvider>
       </body>
     </html>

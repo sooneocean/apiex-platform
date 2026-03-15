@@ -1,16 +1,14 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useQuery } from '@tanstack/react-query'
 import dynamic from 'next/dynamic'
 import { RefreshCw, AlertCircle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import {
   makeAdminAnalyticsApi,
   type Period,
-  type PlatformOverviewData,
-  type LatencyData,
-  type TopUsersData,
 } from '@/lib/api'
 import StatsCard from '@/components/analytics/StatsCard'
 import PeriodSelector from '@/components/analytics/PeriodSelector'
@@ -53,15 +51,7 @@ function ErrorBanner({ message }: { message: string }) {
 
 export default function AdminAnalyticsPage() {
   const router = useRouter()
-
   const [period, setPeriod] = useState<Period>('7d')
-  const [overview, setOverview] = useState<PlatformOverviewData | null>(null)
-  const [latency, setLatency] = useState<LatencyData | null>(null)
-  const [topUsers, setTopUsers] = useState<TopUsersData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  const abortRef = useRef<AbortController | null>(null)
 
   async function getToken(): Promise<string> {
     const { data } = await supabase.auth.getSession()
@@ -72,49 +62,44 @@ export default function AdminAnalyticsPage() {
     return data.session.access_token
   }
 
-  const loadAnalytics = useCallback(async (p: Period) => {
-    if (abortRef.current) {
-      abortRef.current.abort()
-    }
-    const controller = new AbortController()
-    abortRef.current = controller
-    const signal = controller.signal
-
-    setLoading(true)
-    setError(null)
-
-    try {
+  const overviewQuery = useQuery({
+    queryKey: ['admin', 'analytics', 'overview', period],
+    queryFn: async ({ signal }) => {
       const token = await getToken()
       const api = makeAdminAnalyticsApi(token)
+      const res = await api.getOverview({ period }, signal)
+      return res.data
+    },
+  })
 
-      const [ovRes, ltRes, tuRes] = await Promise.all([
-        api.getOverview({ period: p }, signal),
-        api.getLatency({ period: p }, signal),
-        api.getTopUsers({ period: p, limit: 10 }, signal),
-      ])
+  const latencyQuery = useQuery({
+    queryKey: ['admin', 'analytics', 'latency', period],
+    queryFn: async ({ signal }) => {
+      const token = await getToken()
+      const api = makeAdminAnalyticsApi(token)
+      const res = await api.getLatency({ period }, signal)
+      return res.data
+    },
+  })
 
-      if (signal.aborted) return
+  const topUsersQuery = useQuery({
+    queryKey: ['admin', 'analytics', 'topUsers', period],
+    queryFn: async ({ signal }) => {
+      const token = await getToken()
+      const api = makeAdminAnalyticsApi(token)
+      const res = await api.getTopUsers({ period, limit: 10 }, signal)
+      return res.data
+    },
+  })
 
-      setOverview(ovRes.data)
-      setLatency(ltRes.data)
-      setTopUsers(tuRes.data)
-    } catch (e) {
-      if ((e as Error)?.name === 'AbortError') return
-      setError(e instanceof Error ? e.message : '資料載入失敗')
-    } finally {
-      if (!signal.aborted) {
-        setLoading(false)
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  const loading = overviewQuery.isLoading || latencyQuery.isLoading || topUsersQuery.isLoading
+  const isFetching = overviewQuery.isFetching || latencyQuery.isFetching || topUsersQuery.isFetching
+  const error = overviewQuery.error || latencyQuery.error || topUsersQuery.error
+  const errorMessage = error instanceof Error ? error.message : error ? '資料載入失敗' : null
 
-  useEffect(() => {
-    loadAnalytics(period)
-    return () => {
-      abortRef.current?.abort()
-    }
-  }, [period, loadAnalytics])
+  const overview = overviewQuery.data ?? null
+  const latency = latencyQuery.data ?? null
+  const topUsers = topUsersQuery.data ?? null
 
   return (
     <div className="p-8 space-y-6">
@@ -128,16 +113,20 @@ export default function AdminAnalyticsPage() {
             disabled={loading}
           />
           <button
-            onClick={() => loadAnalytics(period)}
+            onClick={() => {
+              overviewQuery.refetch()
+              latencyQuery.refetch()
+              topUsersQuery.refetch()
+            }}
             disabled={loading}
             className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-40"
           >
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
           </button>
         </div>
       </div>
 
-      {error && <ErrorBanner message={error} />}
+      {errorMessage && <ErrorBanner message={errorMessage} />}
 
       {/* Stats Cards */}
       {loading ? (

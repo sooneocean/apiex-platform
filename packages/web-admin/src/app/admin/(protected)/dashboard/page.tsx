@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { makeAdminApi, makeKeysApi, AdminUser, ApiKey } from '@/lib/api'
 import UserTable from '@/components/UserTable'
@@ -12,12 +13,7 @@ import { Plus, RefreshCw } from 'lucide-react'
 
 export default function DashboardPage() {
   const router = useRouter()
-  const [users, setUsers] = useState<AdminUser[]>([])
-  const [apiKeys, setApiKeys] = useState<ApiKey[]>([])
-  const [usersLoading, setUsersLoading] = useState(true)
-  const [keysLoading, setKeysLoading] = useState(true)
-  const [usersError, setUsersError] = useState<string | null>(null)
-  const [keysError, setKeysError] = useState<string | null>(null)
+  const queryClient = useQueryClient()
   const [createModalOpen, setCreateModalOpen] = useState(false)
 
   async function getToken(): Promise<string> {
@@ -29,49 +25,35 @@ export default function DashboardPage() {
     return data.session.access_token
   }
 
-  const fetchUsers = useCallback(async () => {
-    setUsersLoading(true)
-    setUsersError(null)
-    try {
+  const usersQuery = useQuery({
+    queryKey: ['admin', 'users'],
+    queryFn: async () => {
       const token = await getToken()
       const adminApi = makeAdminApi(token)
       const response = await adminApi.getUsers()
-      setUsers(response.data)
-    } catch (e) {
-      setUsersError(e instanceof Error ? e.message : 'Failed to load users')
-    } finally {
-      setUsersLoading(false)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+      return response.data as AdminUser[]
+    },
+  })
 
-  const fetchKeys = useCallback(async () => {
-    setKeysLoading(true)
-    setKeysError(null)
-    try {
+  const keysQuery = useQuery({
+    queryKey: ['admin', 'keys'],
+    queryFn: async () => {
       const token = await getToken()
       const keysApi = makeKeysApi(token)
       const response = await keysApi.list()
-      setApiKeys(response.data)
-    } catch (e) {
-      setKeysError(e instanceof Error ? e.message : 'Failed to load API keys')
-    } finally {
-      setKeysLoading(false)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+      return response.data as ApiKey[]
+    },
+  })
 
-  useEffect(() => {
-    fetchUsers()
-    fetchKeys()
-  }, [fetchUsers, fetchKeys])
+  const users = usersQuery.data ?? []
+  const apiKeys = keysQuery.data ?? []
 
   async function handleQuotaUpdate(userId: string, quota: number) {
     const token = await getToken()
     const adminApi = makeAdminApi(token)
     await adminApi.setQuota(userId, quota)
-    setUsers((prev) =>
-      prev.map((u) => (u.id === userId ? { ...u, quota_tokens: quota } : u))
+    queryClient.setQueryData<AdminUser[]>(['admin', 'users'], (prev) =>
+      prev?.map((u) => (u.id === userId ? { ...u, quota_tokens: quota } : u))
     )
   }
 
@@ -79,8 +61,8 @@ export default function DashboardPage() {
     const token = await getToken()
     const adminApi = makeAdminApi(token)
     await adminApi.setRateLimit(userId, tier)
-    setUsers((prev) =>
-      prev.map((u) => (u.id === userId ? { ...u, rate_limit_tier: tier } : u))
+    queryClient.setQueryData<AdminUser[]>(['admin', 'users'], (prev) =>
+      prev?.map((u) => (u.id === userId ? { ...u, rate_limit_tier: tier } : u))
     )
   }
 
@@ -88,8 +70,8 @@ export default function DashboardPage() {
     const token = await getToken()
     const keysApi = makeKeysApi(token)
     await keysApi.revoke(id)
-    setApiKeys((prev) =>
-      prev.map((k) => (k.id === id ? { ...k, status: 'revoked' } : k))
+    queryClient.setQueryData<ApiKey[]>(['admin', 'keys'], (prev) =>
+      prev?.map((k) => (k.id === id ? { ...k, status: 'revoked' } : k))
     )
   }
 
@@ -97,7 +79,7 @@ export default function DashboardPage() {
     const token = await getToken()
     const keysApi = makeKeysApi(token)
     const response = await keysApi.create(name, spendLimitUsd, expiresAt)
-    await fetchKeys()
+    queryClient.invalidateQueries({ queryKey: ['admin', 'keys'] })
     return { key: response.data.key }
   }
 
@@ -108,20 +90,20 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-gray-900">用戶管理</h2>
           <button
-            onClick={fetchUsers}
-            disabled={usersLoading}
+            onClick={() => usersQuery.refetch()}
+            disabled={usersQuery.isLoading}
             className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-40"
           >
-            <RefreshCw size={14} className={usersLoading ? 'animate-spin' : ''} />
+            <RefreshCw size={14} className={usersQuery.isFetching ? 'animate-spin' : ''} />
             重新整理
           </button>
         </div>
-        {usersError && (
+        {usersQuery.error && (
           <div className="mb-3 rounded-md bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
-            {usersError}
+            {usersQuery.error instanceof Error ? usersQuery.error.message : 'Failed to load users'}
           </div>
         )}
-        {usersLoading ? (
+        {usersQuery.isLoading ? (
           <LoadingSkeleton variant="table" />
         ) : (
           <div className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
@@ -136,11 +118,11 @@ export default function DashboardPage() {
           <h2 className="text-lg font-semibold text-gray-900">API Keys</h2>
           <div className="flex items-center gap-3">
             <button
-              onClick={fetchKeys}
-              disabled={keysLoading}
+              onClick={() => keysQuery.refetch()}
+              disabled={keysQuery.isLoading}
               className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-40"
             >
-              <RefreshCw size={14} className={keysLoading ? 'animate-spin' : ''} />
+              <RefreshCw size={14} className={keysQuery.isFetching ? 'animate-spin' : ''} />
               重新整理
             </button>
             <button
@@ -152,12 +134,12 @@ export default function DashboardPage() {
             </button>
           </div>
         </div>
-        {keysError && (
+        {keysQuery.error && (
           <div className="mb-3 rounded-md bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
-            {keysError}
+            {keysQuery.error instanceof Error ? keysQuery.error.message : 'Failed to load API keys'}
           </div>
         )}
-        {keysLoading ? (
+        {keysQuery.isLoading ? (
           <LoadingSkeleton variant="cards" />
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

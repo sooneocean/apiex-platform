@@ -1,7 +1,9 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { makeAdminApi, UsageLog, Pagination } from '@/lib/api'
 import UsageLogsTable from '@/components/UsageLogsTable'
@@ -12,10 +14,6 @@ const PER_PAGE = 20
 
 export default function LogsPage() {
   const router = useRouter()
-  const [logs, setLogs] = useState<UsageLog[]>([])
-  const [pagination, setPagination] = useState<Pagination | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [modelTagFilter, setModelTagFilter] = useState('')
   const [debouncedFilter, setDebouncedFilter] = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -30,30 +28,19 @@ export default function LogsPage() {
     return data.session.access_token
   }
 
-  const fetchLogs = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
+  const logsQuery = useQuery({
+    queryKey: ['admin', 'logs', page, debouncedFilter],
+    queryFn: async ({ signal }) => {
       const token = await getToken()
       const adminApi = makeAdminApi(token)
-      const result = await adminApi.getUsageLogs({
+      return adminApi.getUsageLogs({
         model_tag: debouncedFilter || undefined,
         page,
         per_page: PER_PAGE,
-      })
-      setLogs(result.data)
-      setPagination(result.pagination)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load logs')
-    } finally {
-      setLoading(false)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, debouncedFilter])
-
-  useEffect(() => {
-    fetchLogs()
-  }, [fetchLogs])
+      }, signal)
+    },
+    placeholderData: keepPreviousData,
+  })
 
   useEffect(() => {
     return () => {
@@ -77,6 +64,8 @@ export default function LogsPage() {
     setPage(1)
   }
 
+  const logs: UsageLog[] = logsQuery.data?.data ?? []
+  const pagination: Pagination | null = logsQuery.data?.pagination ?? null
   const totalPages = pagination ? Math.ceil(pagination.total / PER_PAGE) : 1
 
   return (
@@ -84,11 +73,11 @@ export default function LogsPage() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-lg font-semibold text-gray-900">Usage Logs</h1>
         <button
-          onClick={() => fetchLogs()}
-          disabled={loading}
+          onClick={() => logsQuery.refetch()}
+          disabled={logsQuery.isLoading}
           className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-40"
         >
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+          <RefreshCw size={14} className={logsQuery.isFetching ? 'animate-spin' : ''} />
           重新整理
         </button>
       </div>
@@ -131,13 +120,13 @@ export default function LogsPage() {
         )}
       </form>
 
-      {error && (
+      {logsQuery.error && (
         <div className="mb-4 rounded-md bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
-          {error}
+          {logsQuery.error instanceof Error ? logsQuery.error.message : 'Failed to load logs'}
         </div>
       )}
 
-      {loading ? (
+      {logsQuery.isLoading ? (
         <LoadingSkeleton variant="table" />
       ) : (
         <div className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
@@ -154,7 +143,7 @@ export default function LogsPage() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page <= 1 || loading}
+              disabled={page <= 1 || logsQuery.isLoading}
               className="flex items-center gap-1 rounded-md border border-gray-300 bg-white px-3 py-1.5 hover:bg-gray-50 disabled:opacity-40 transition-colors"
             >
               <ChevronLeft size={14} />
@@ -162,7 +151,7 @@ export default function LogsPage() {
             </button>
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page >= totalPages || loading}
+              disabled={page >= totalPages || logsQuery.isLoading}
               className="flex items-center gap-1 rounded-md border border-gray-300 bg-white px-3 py-1.5 hover:bg-gray-50 disabled:opacity-40 transition-colors"
             >
               下一頁

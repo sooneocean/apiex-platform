@@ -62,3 +62,5 @@
 
 - 新增 Admin CRUD 頁面時必須使用 `useTranslations()`，不可 hardcode 字串。容易在功能開發完成後遺漏 i18n 整合。
   — rate-limit-v2 (2026-03)
+- API factory 函式新增 signal 支援時，所有 consumer 必須同步更新 — 建議統一 API 函式簽名都帶 optional signal 參數
+  — data-fetching-layer (2026-03)

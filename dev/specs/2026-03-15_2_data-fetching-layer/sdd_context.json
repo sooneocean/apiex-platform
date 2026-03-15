@@ -1,0 +1,342 @@
+{
+  "sdd_context": {
+    "version": "3.0.0",
+    "feature": "data-fetching-layer",
+    "feature_name": "引入 TanStack React Query 快取層，取代 useEffect + useState 資料取得模式",
+    "current_stage": "S7",
+    "spec_mode": "quick",
+    "spec_mode_reason": "純前端重構，無 DB/API 變更，模式統一（useEffect→useQuery），影響範圍明確",
+    "work_type": "refactor",
+    "spec_folder": "dev/specs/2026-03-15_2_data-fetching-layer",
+    "execution_mode": "autopilot",
+    "status": "completed",
+    "completed_at": "2026-03-15T12:00:00Z",
+    "started_at": "2026-03-15T10:00:00Z",
+    "last_updated": "2026-03-15T10:30:00Z",
+    "last_updated_by": "architect",
+    "stages": {
+      "s0": {
+        "status": "completed",
+        "agent": "requirement-analyst",
+        "started_at": "2026-03-15T10:00:00Z",
+        "output": {
+          "work_type": "refactor",
+          "requirement": "將 web-admin 所有頁面的 useEffect + useState 資料取得模式遷移至 TanStack React Query，實現 stale-while-revalidate 快取、自動重試、統一錯誤處理",
+          "goal": "頁面切換不再重新 fetch，已快取資料立即顯示，背景自動 revalidate",
+          "pain_points": [
+            "每次頁面切換都重新 fetch 所有資料，等待時間長",
+            "手動管理 loading/error/data state 重複且易出錯",
+            "無 stale-while-revalidate，使用者感知延遲高",
+            "AbortController 手動管理複雜"
+          ],
+          "success_criteria": [
+            "SC-1: 安裝 @tanstack/react-query，root layout 配置 QueryClientProvider",
+            "SC-2: Admin Dashboard 的 users 和 keys fetch 改用 useQuery",
+            "SC-3: Admin Analytics 的 overview/latency/topUsers fetch 改用 useQuery",
+            "SC-4: Admin Logs 的 logs fetch 改用 useQuery，保留 debounce 邏輯",
+            "SC-5: Portal Dashboard 的 analytics 和 keys fetch 改用 useQuery",
+            "SC-6: 頁面切換時已快取的資料立即顯示（stale-while-revalidate）"
+          ],
+          "scope_in": [
+            "安裝 @tanstack/react-query + @tanstack/react-query-devtools",
+            "建立 QueryClient 配置（staleTime、gcTime、retry）",
+            "建立 QueryClientProvider wrapper（use client）",
+            "Admin Dashboard 遷移至 useQuery",
+            "Admin Analytics 遷移至 useQuery",
+            "Admin Logs 遷移至 useQuery（保留 debounce）",
+            "Portal Dashboard 遷移至 useQuery"
+          ],
+          "scope_out": [
+            "mutation 操作改用 useMutation（後續 SOP）",
+            "Optimistic updates（後續 SOP）",
+            "Server-side prefetching / SSR hydration",
+            "其他頁面（Settings、Webhooks 等）",
+            "後端 API 修改"
+          ],
+          "constraints": [
+            "保留現有 API 客戶端（makeAdminApi 等）",
+            "保留現有 getToken() 認證模式",
+            "保留 SOP-1 的 debounce 邏輯和 LoadingSkeleton",
+            "QueryClientProvider 必須是 use client component（Next.js 15 App Router）"
+          ]
+        }
+      },
+      "s1": {
+        "status": "completed",
+        "agents": ["codebase-explorer", "architect"],
+        "completed_at": "2026-03-15T10:30:00Z",
+        "output": {
+          "completed_phases": [1, 2],
+          "solution_summary": "建立 ReactQueryProvider（use client）包在 NextIntlClientProvider 內層，QueryClient 設 staleTime=60s/gcTime=5min/retry=1。5 個目標頁面各以 useQuery 取代 useEffect+useState fetch 邏輯，queryKey 帶入 dependency（period/page/filter/keyId）讓快取自動分組。Analytics 與 Portal 多個並行 query 用多個獨立 useQuery，loading = isLoading || isFetching 聯集。Admin Dashboard mutation 後的 fetchKeys() 改為 queryClient.invalidateQueries，保留現有 optimistic setState。AbortController 由 RQ signal 接管。",
+          "assumptions": [
+            "getToken() 在 queryFn 內直接呼叫，不需提升到 hook 外層",
+            "mutation（handleQuotaUpdate/handleTierUpdate/handleRevokeKey）本次不改，保留現有 setState optimistic pattern",
+            "handleCreateKey 完成後改用 invalidateQueries 觸發 keys 重新 fetch，移除 await fetchKeys()",
+            "Devtools 僅在 process.env.NODE_ENV === 'development' 時渲染",
+            "Portal Dashboard billing query 不帶 keyId（依 API 設計 billing 不按 key 篩選）"
+          ],
+          "tech_decisions": {
+            "queryClientConfig": {
+              "staleTime": 60000,
+              "gcTime": 300000,
+              "retry": 1,
+              "reason": "staleTime=1min 實現頁面切換快取體驗；retry=1 避免 auth 過期時無限重試"
+            },
+            "parallelQueryStrategy": "多個獨立 useQuery（非 useQueries），各自 loading/error state，combined loading = q1.isLoading || q2.isLoading || ...",
+            "providerPosition": "ReactQueryProvider 包在 NextIntlClientProvider 內層，確保 i18n context 先就緒",
+            "devtools": "引入 @tanstack/react-query-devtools，僅 dev 環境渲染",
+            "mutationStrategy": "本次保留現有 setState optimistic pattern，mutation 後用 queryClient.invalidateQueries 取代手動 refetch",
+            "queryKeys": {
+              "admin_users": ["admin", "users"],
+              "admin_keys": ["admin", "keys"],
+              "admin_analytics_overview": ["admin", "analytics", "overview", "period"],
+              "admin_analytics_latency": ["admin", "analytics", "latency", "period"],
+              "admin_analytics_topUsers": ["admin", "analytics", "topUsers", "period"],
+              "admin_logs": ["admin", "logs", "page", "debouncedFilter"],
+              "portal_keys": ["portal", "keys"],
+              "portal_analytics_timeseries": ["portal", "analytics", "timeseries", "period", "selectedKeyId"],
+              "portal_analytics_breakdown": ["portal", "analytics", "breakdown", "period", "selectedKeyId"],
+              "portal_analytics_latency": ["portal", "analytics", "latency", "period", "selectedKeyId"],
+              "portal_analytics_billing": ["portal", "analytics", "billing", "period"]
+            }
+          },
+          "impact_scope": {
+            "frontend": [
+              "packages/web-admin/src/app/layout.tsx",
+              "packages/web-admin/src/components/providers/ReactQueryProvider.tsx",
+              "packages/web-admin/src/app/admin/(protected)/dashboard/page.tsx",
+              "packages/web-admin/src/app/admin/(protected)/analytics/page.tsx",
+              "packages/web-admin/src/app/admin/(protected)/logs/page.tsx",
+              "packages/web-admin/src/app/portal/dashboard/page.tsx"
+            ],
+            "backend": [],
+            "database": []
+          },
+          "tasks": [
+            {
+              "id": "T1",
+              "sc": "SC-1",
+              "name": "安裝依賴並建立 ReactQueryProvider",
+              "type": "frontend",
+              "agent": "frontend-expert",
+              "complexity": "S",
+              "dependencies": [],
+              "parallel": false,
+              "affected_files": [
+                "packages/web-admin/package.json",
+                "packages/web-admin/src/components/providers/ReactQueryProvider.tsx",
+                "packages/web-admin/src/app/layout.tsx"
+              ],
+              "description": "安裝 @tanstack/react-query 與 @tanstack/react-query-devtools。建立 ReactQueryProvider.tsx（use client），QueryClient 設 staleTime=60s、gcTime=5min、retry=1。layout.tsx 在 NextIntlClientProvider 內層加入 <ReactQueryProvider>。Devtools 僅 development 環境渲染。",
+              "dod": [
+                "package.json 出現 @tanstack/react-query 和 @tanstack/react-query-devtools 依賴",
+                "src/components/providers/ReactQueryProvider.tsx 存在，含 'use client' 指令",
+                "QueryClient 配置含 staleTime: 60_000、gcTime: 5 * 60_000、retry: 1",
+                "layout.tsx 的 NextIntlClientProvider 內層有 ReactQueryProvider 包住 children",
+                "ReactQueryDevtools 以 process.env.NODE_ENV === 'development' 條件渲染"
+              ]
+            },
+            {
+              "id": "T2",
+              "sc": "SC-2",
+              "name": "Admin Dashboard 遷移至 useQuery",
+              "type": "frontend",
+              "agent": "frontend-expert",
+              "complexity": "M",
+              "dependencies": ["T1"],
+              "parallel": true,
+              "affected_files": [
+                "packages/web-admin/src/app/admin/(protected)/dashboard/page.tsx"
+              ],
+              "description": "將 fetchUsers/fetchKeys useCallback + useEffect 改為 2 個 useQuery。queryKey: ['admin','users'] 和 ['admin','keys']。移除手動 usersLoading/keysLoading/usersError/keysError state。RefreshCw 按鈕改呼叫 refetch()。handleCreateKey 的 await fetchKeys() 改為 queryClient.invalidateQueries({ queryKey: ['admin','keys'] })。保留所有 mutation handler 的 setState 邏輯不動。",
+              "dod": [
+                "dashboard/page.tsx 無 fetchUsers、fetchKeys useCallback 函式",
+                "存在 useQuery({ queryKey: ['admin','users'], ... }) 和 useQuery({ queryKey: ['admin','keys'], ... })",
+                "無手動 setUsersLoading、setKeysLoading、setUsersError、setKeysError",
+                "RefreshCw 按鈕 onClick 呼叫對應 query 的 refetch()",
+                "handleCreateKey 內呼叫 queryClient.invalidateQueries({ queryKey: ['admin','keys'] })，無 await fetchKeys()",
+                "handleQuotaUpdate、handleTierUpdate、handleRevokeKey 的 setState 邏輯不變"
+              ]
+            },
+            {
+              "id": "T3",
+              "sc": "SC-3",
+              "name": "Admin Analytics 遷移至 useQuery",
+              "type": "frontend",
+              "agent": "frontend-expert",
+              "complexity": "M",
+              "dependencies": ["T1"],
+              "parallel": true,
+              "affected_files": [
+                "packages/web-admin/src/app/admin/(protected)/analytics/page.tsx"
+              ],
+              "description": "將 loadAnalytics + abortRef + useEffect 改為 3 個獨立 useQuery。queryKey 各帶 period。移除 AbortController（RQ 的 signal 透過 queryFn 參數 { signal } 傳入各 API 呼叫）。loading = overviewQuery.isLoading || latencyQuery.isLoading || topUsersQuery.isLoading，isFetching 用於 RefreshCw 動畫。error = overviewQuery.error 取第一個非 null。RefreshCw 按鈕改呼叫三個 query 的 refetch()。",
+              "dod": [
+                "analytics/page.tsx 無 abortRef、無 AbortController",
+                "存在 3 個 useQuery，queryKey 分別含 period",
+                "queryFn 接收 { signal } 並傳入 api call",
+                "無 loadAnalytics useCallback",
+                "loading state 是 3 個 query isLoading 的聯集",
+                "RefreshCw onClick 觸發 3 個 query refetch()"
+              ]
+            },
+            {
+              "id": "T4",
+              "sc": "SC-4",
+              "name": "Admin Logs 遷移至 useQuery（保留 debounce）",
+              "type": "frontend",
+              "agent": "frontend-expert",
+              "complexity": "M",
+              "dependencies": ["T1"],
+              "parallel": true,
+              "affected_files": [
+                "packages/web-admin/src/app/admin/(protected)/logs/page.tsx"
+              ],
+              "description": "將 fetchLogs useCallback + useEffect 改為 useQuery。queryKey: ['admin','logs', page, debouncedFilter]，RQ 在 key 變更時自動重新 fetch。加入 placeholderData: keepPreviousData 讓翻頁時保留舊資料不閃爍。保留 debounceRef/modelTagFilter/debouncedFilter state 及 handleFilterChange/handleFilterSubmit 邏輯不變（這些控制 debouncedFilter，進而改變 queryKey）。RefreshCw 按鈕改呼叫 refetch()。",
+              "dod": [
+                "logs/page.tsx 無 fetchLogs useCallback",
+                "存在 useQuery，queryKey: ['admin','logs', page, debouncedFilter]",
+                "useQuery 含 placeholderData: keepPreviousData",
+                "debounceRef、modelTagFilter、debouncedFilter、handleFilterChange、handleFilterSubmit 保留不變",
+                "RefreshCw onClick 呼叫 refetch()",
+                "無手動 setLoading、setError、setLogs、setPagination for query"
+              ]
+            },
+            {
+              "id": "T5",
+              "sc": "SC-5",
+              "name": "Portal Dashboard 遷移至 useQuery",
+              "type": "frontend",
+              "agent": "frontend-expert",
+              "complexity": "L",
+              "dependencies": ["T1"],
+              "parallel": true,
+              "affected_files": [
+                "packages/web-admin/src/app/portal/dashboard/page.tsx"
+              ],
+              "description": "將 loadKeys/loadAnalytics + abortRef + useEffect 改為 5 個獨立 useQuery。keys: ['portal','keys']；analytics 4 個 query key 帶 period+selectedKeyId（billing 只帶 period）。移除 AbortController。combined loading = keys + 4 analytics query isLoading 聯集。keysLoading 改用 keysQuery.isLoading。保留 useMemo avgLatency 邏輯（latencyQuery.data 取代原本 latency state）。RefreshCw 按鈕 onClick 觸發 4 個 analytics query refetch()。",
+              "dod": [
+                "portal/dashboard/page.tsx 無 abortRef、無 AbortController",
+                "存在 5 個 useQuery，queryKey 各自正確",
+                "無 loadKeys、loadAnalytics useCallback",
+                "keysLoading 用 keysQuery.isLoading",
+                "analytics loading state 是 4 個 query isLoading 聯集",
+                "useMemo avgLatency 以 latencyQuery.data 計算（邏輯不變）",
+                "RefreshCw onClick 觸發 4 個 analytics query refetch()"
+              ]
+            }
+          ],
+          "acceptance_criteria": [
+            {
+              "scenario": "AC-1 快取命中（SC-6）",
+              "given": "用戶已訪問 Admin Dashboard，users/keys 資料已快取（staleTime 未過期）",
+              "when": "切換到 Analytics 頁面再切回 Dashboard",
+              "then": "users 和 keys 列表立即顯示，不出現 LoadingSkeleton，背景自動 revalidate"
+            },
+            {
+              "scenario": "AC-2 Logs debounce 保留（SC-4）",
+              "given": "用戶在 Admin Logs 頁面輸入 model tag filter",
+              "when": "停止輸入 300ms 後",
+              "then": "自動觸發新 query，翻頁 reset 為第 1 頁，期間翻頁使用 placeholderData 不閃爍"
+            },
+            {
+              "scenario": "AC-3 建立 Key 後列表更新（SC-2）",
+              "given": "用戶在 Admin Dashboard 點擊「建立 Key」並完成建立",
+              "when": "modal 關閉後",
+              "then": "keys 列表自動更新（invalidateQueries 觸發 refetch），不需手動重新整理"
+            },
+            {
+              "scenario": "AC-4 Analytics period 切換（SC-3）",
+              "given": "用戶在 Admin Analytics 頁面",
+              "when": "切換 period selector（7d → 30d）",
+              "then": "3 個 query 各自以新 period 重新 fetch，loading spinner 顯示，完成後更新圖表"
+            },
+            {
+              "scenario": "AC-5 Portal analytics key filter（SC-5）",
+              "given": "用戶在 Portal Dashboard 選擇特定 API Key",
+              "when": "KeySelector 切換 selectedKeyId",
+              "then": "timeseries/breakdown/latency 3 個 query 以新 keyId 重新 fetch，billing query 不重新 fetch（keyId 不在其 queryKey）"
+            }
+          ],
+          "risks": [
+            {
+              "type": "功能回歸",
+              "level": "Low",
+              "description": "Dashboard mutation handler 的 setState + invalidateQueries 混用，若 invalidateQueries 時機不對可能短暫 UI 不一致",
+              "mitigation": "invalidateQueries 在 mutation API call 成功後立即呼叫，RQ refetch 是背景進行不影響 UI"
+            },
+            {
+              "type": "快取污染",
+              "level": "Low",
+              "description": "Admin 與 Portal 使用相同 token 但 queryKey 前綴不同，若 token 過期可能快取舊資料",
+              "mitigation": "retry: 1 + 401 error 時 getToken 會 redirect，快取會因 mount 時驗證失效"
+            }
+          ],
+          "regression_risks": [
+            "Admin Dashboard: handleCreateKey 的 await fetchKeys() 行為改變（fire-and-forget vs 等待完成），modal onCreate promise resolve timing 需確認",
+            "Portal Dashboard: keysLoading 邏輯改用 keysQuery.isLoading，KeySelector 顯示條件需確認一致"
+          ],
+          "tech_debt": [
+            "mutation 操作（handleQuotaUpdate/handleTierUpdate/handleRevokeKey/handleCreateKey）尚未遷移至 useMutation，仍保留 async handler 模式",
+            "getToken() 在每個 queryFn 內各自呼叫，可考慮抽成 shared useAuth hook（後續 SOP）"
+          ]
+        }
+      },
+      "s2": {
+        "status": "skipped",
+        "output": {
+          "reason": "Quick 模式跳過 S2"
+        }
+      },
+      "s3": { "status": "completed" },
+      "s4": {
+        "status": "completed",
+        "agents": ["orchestrator"],
+        "output": {
+          "build_status": "pass",
+          "completed_tasks": ["T1", "T2", "T3", "T4", "T5"],
+          "changes": [
+            "packages/web-admin/package.json",
+            "packages/web-admin/src/components/providers/ReactQueryProvider.tsx",
+            "packages/web-admin/src/app/layout.tsx",
+            "packages/web-admin/src/app/admin/(protected)/dashboard/page.tsx",
+            "packages/web-admin/src/app/admin/(protected)/analytics/page.tsx",
+            "packages/web-admin/src/app/admin/(protected)/logs/page.tsx",
+            "packages/web-admin/src/app/portal/dashboard/page.tsx"
+          ]
+        }
+      },
+      "s5": {
+        "status": "completed",
+        "repair_loop_count": 1,
+        "output": {
+          "conclusion": "pass",
+          "score": 92,
+          "fixes_applied": ["CR-P1-001: getUsageLogs 加 signal 參數，logs queryFn 傳 signal"]
+        }
+      },
+      "s6": {
+        "status": "completed",
+        "output": {
+          "automated_tests": { "typescript": "pass", "next_build": "pass" },
+          "ac_verification": { "total": 5, "passed": 5, "failed": 0 },
+          "recommendation": "all_pass"
+        }
+      },
+      "s7": { "status": "completed" },
+      "lessons_learned": {
+        "what_went_well": [
+          "useQuery 遷移模式統一，4 個頁面同樣的 pattern 快速套用",
+          "apiGet 已支援 signal，只需傳遞即可",
+          "keepPreviousData 完美解決分頁閃爍問題"
+        ],
+        "what_went_wrong": [
+          "S5 發現 getUsageLogs 未傳 signal — API 函式簽名不一致（有的有 signal 有的沒有）"
+        ],
+        "new_pitfalls": [
+          "API factory 函式新增 signal 支援時，所有 consumer 都要同步更新 — 建議統一 API 函式簽名都帶 optional signal"
+        ]
+      }
+    }
+  }
+}

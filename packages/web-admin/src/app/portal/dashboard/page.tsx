@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
+import { useQuery } from '@tanstack/react-query'
 import dynamic from 'next/dynamic'
 import { RefreshCw, AlertCircle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -9,11 +10,6 @@ import {
   makeAnalyticsApi,
   makeKeysApi,
   type Period,
-  type TimeseriesData,
-  type ModelBreakdownData,
-  type LatencyData,
-  type BillingSummary,
-  type ApiKey,
 } from '@/lib/api'
 import StatsCard from '@/components/analytics/StatsCard'
 import PeriodSelector from '@/components/analytics/PeriodSelector'
@@ -64,18 +60,6 @@ export default function PortalDashboardPage() {
 
   const [period, setPeriod] = useState<Period>('7d')
   const [selectedKeyId, setSelectedKeyId] = useState<string | null>(null)
-  const [keys, setKeys] = useState<ApiKey[]>([])
-
-  const [timeseries, setTimeseries] = useState<TimeseriesData | null>(null)
-  const [breakdown, setBreakdown] = useState<ModelBreakdownData | null>(null)
-  const [latency, setLatency] = useState<LatencyData | null>(null)
-  const [billing, setBilling] = useState<BillingSummary | null>(null)
-
-  const [loading, setLoading] = useState(true)
-  const [keysLoading, setKeysLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  const abortRef = useRef<AbortController | null>(null)
 
   async function getToken(): Promise<string> {
     const { data } = await supabase.auth.getSession()
@@ -86,78 +70,66 @@ export default function PortalDashboardPage() {
     return data.session.access_token
   }
 
-  // 載入 API Keys 清單（只需一次）
-  const loadKeys = useCallback(async () => {
-    setKeysLoading(true)
-    try {
+  const keysQuery = useQuery({
+    queryKey: ['portal', 'keys'],
+    queryFn: async () => {
       const token = await getToken()
       const keysApi = makeKeysApi(token)
       const res = await keysApi.list()
-      setKeys(res.data)
-    } catch {
-      // 無法載入 key 列表不阻斷主流程
-    } finally {
-      setKeysLoading(false)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // 載入 Analytics 資料
-  const loadAnalytics = useCallback(
-    async (p: Period, keyId: string | null) => {
-      // 取消前一個請求
-      if (abortRef.current) {
-        abortRef.current.abort()
-      }
-      const controller = new AbortController()
-      abortRef.current = controller
-      const signal = controller.signal
-
-      setLoading(true)
-      setError(null)
-
-      try {
-        const token = await getToken()
-        const api = makeAnalyticsApi(token)
-
-        const params = { period: p, key_id: keyId ?? undefined }
-
-        const [tsRes, bdRes, ltRes, blRes] = await Promise.all([
-          api.getTimeseries(params, signal),
-          api.getModelBreakdown(params, signal),
-          api.getLatency(params, signal),
-          api.getBilling({ period: p }, signal),
-        ])
-
-        if (signal.aborted) return
-
-        setTimeseries(tsRes.data)
-        setBreakdown(bdRes.data)
-        setLatency(ltRes.data)
-        setBilling(blRes.data)
-      } catch (e) {
-        if ((e as Error)?.name === 'AbortError') return
-        setError(e instanceof Error ? e.message : '資料載入失敗')
-      } finally {
-        if (!signal.aborted) {
-          setLoading(false)
-        }
-      }
-      // eslint-disable-next-line react-hooks/exhaustive-deps
+      return res.data
     },
-    []
-  )
+  })
 
-  useEffect(() => {
-    loadKeys()
-  }, [loadKeys])
+  const timeseriesQuery = useQuery({
+    queryKey: ['portal', 'analytics', 'timeseries', period, selectedKeyId],
+    queryFn: async ({ signal }) => {
+      const token = await getToken()
+      const api = makeAnalyticsApi(token)
+      const res = await api.getTimeseries({ period, key_id: selectedKeyId ?? undefined }, signal)
+      return res.data
+    },
+  })
 
-  useEffect(() => {
-    loadAnalytics(period, selectedKeyId)
-    return () => {
-      abortRef.current?.abort()
-    }
-  }, [period, selectedKeyId, loadAnalytics])
+  const breakdownQuery = useQuery({
+    queryKey: ['portal', 'analytics', 'breakdown', period, selectedKeyId],
+    queryFn: async ({ signal }) => {
+      const token = await getToken()
+      const api = makeAnalyticsApi(token)
+      const res = await api.getModelBreakdown({ period, key_id: selectedKeyId ?? undefined }, signal)
+      return res.data
+    },
+  })
+
+  const latencyQuery = useQuery({
+    queryKey: ['portal', 'analytics', 'latency', period, selectedKeyId],
+    queryFn: async ({ signal }) => {
+      const token = await getToken()
+      const api = makeAnalyticsApi(token)
+      const res = await api.getLatency({ period, key_id: selectedKeyId ?? undefined }, signal)
+      return res.data
+    },
+  })
+
+  const billingQuery = useQuery({
+    queryKey: ['portal', 'analytics', 'billing', period],
+    queryFn: async ({ signal }) => {
+      const token = await getToken()
+      const api = makeAnalyticsApi(token)
+      const res = await api.getBilling({ period }, signal)
+      return res.data
+    },
+  })
+
+  const keys = keysQuery.data ?? []
+  const timeseries = timeseriesQuery.data ?? null
+  const breakdown = breakdownQuery.data ?? null
+  const latency = latencyQuery.data ?? null
+  const billing = billingQuery.data ?? null
+
+  const loading = timeseriesQuery.isLoading || breakdownQuery.isLoading || latencyQuery.isLoading || billingQuery.isLoading
+  const isFetching = timeseriesQuery.isFetching || breakdownQuery.isFetching || latencyQuery.isFetching || billingQuery.isFetching
+  const error = timeseriesQuery.error || breakdownQuery.error || latencyQuery.error || billingQuery.error
+  const errorMessage = error instanceof Error ? error.message : error ? '資料載入失敗' : null
 
   const isEmpty =
     !loading &&
@@ -198,7 +170,7 @@ export default function PortalDashboardPage() {
             onChange={(p) => setPeriod(p)}
             disabled={loading}
           />
-          {!keysLoading && keys.length > 0 && (
+          {!keysQuery.isLoading && keys.length > 0 && (
             <KeySelector
               keys={keys}
               value={selectedKeyId}
@@ -207,16 +179,21 @@ export default function PortalDashboardPage() {
             />
           )}
           <button
-            onClick={() => loadAnalytics(period, selectedKeyId)}
+            onClick={() => {
+              timeseriesQuery.refetch()
+              breakdownQuery.refetch()
+              latencyQuery.refetch()
+              billingQuery.refetch()
+            }}
             disabled={loading}
             className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-40"
           >
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
           </button>
         </div>
       </div>
 
-      {error && <ErrorBanner message={error} />}
+      {errorMessage && <ErrorBanner message={errorMessage} />}
 
       {/* Stats Cards */}
       {loading ? (
