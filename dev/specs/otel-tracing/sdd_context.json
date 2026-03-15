@@ -3,16 +3,17 @@
     "version": "3.0.0",
     "feature": "otel-tracing",
     "feature_name": "OpenTelemetry 基礎追蹤",
-    "current_stage": "S4",
+    "current_stage": "S7_DONE",
     "spec_mode": "quick",
     "spec_mode_reason": "基礎設施配置為主，邏輯簡單，Quick 足夠",
     "work_type": "new_feature",
     "spec_folder": "dev/specs/otel-tracing",
     "execution_mode": "autopilot",
-    "status": "in_progress",
+    "status": "completed",
+    "completed_at": "2026-03-15T20:50:00+08:00",
     "started_at": "2026-03-15T18:00:00+08:00",
-    "last_updated": "2026-03-15T18:00:00+08:00",
-    "last_updated_by": "requirement-analyst",
+    "last_updated": "2026-03-15T19:45:00+08:00",
+    "last_updated_by": "orchestrator",
     "stages": {
       "s0": {
         "status": "completed",
@@ -30,6 +31,70 @@
             "SC-6: Dockerfile 包含 OTel 環境變數配置"
           ],
           "scope_out": ["前端 RUM", "結構化日誌", "Prometheus endpoint", "Grafana 儀表板", "自訂 business metrics"]
+        }
+      },
+      "s1": {
+        "status": "completed",
+        "output": {
+          "tasks": [
+            { "id": "T1", "description": "OTel SDK 初始化 (telemetry.ts + index.ts)", "status": "completed" },
+            { "id": "T2", "description": "LLM proxy child span (proxy.ts)", "status": "completed" },
+            { "id": "T3", "description": "Dockerfile OTEL env vars", "status": "completed" }
+          ],
+          "impact_scope": {
+            "files": [
+              "packages/api-server/src/lib/telemetry.ts",
+              "packages/api-server/src/index.ts",
+              "packages/api-server/src/routes/proxy.ts",
+              "packages/api-server/package.json",
+              "Dockerfile"
+            ]
+          }
+        }
+      },
+      "s2": { "status": "skipped", "output": { "reason": "Quick 模式跳過" } },
+      "s3": { "status": "completed" },
+      "s4": {
+        "status": "completed",
+        "output": {
+          "build_status": "pass",
+          "completed_tasks": [
+            { "id": "T1", "sc": "SC-1,SC-4", "status": "completed", "file": "packages/api-server/src/lib/telemetry.ts" },
+            { "id": "T2", "sc": "SC-3", "status": "completed", "file": "packages/api-server/src/routes/proxy.ts" },
+            { "id": "T3", "sc": "SC-6", "status": "completed", "file": "Dockerfile" }
+          ],
+          "changes": [
+            "packages/api-server/src/lib/telemetry.ts",
+            "packages/api-server/src/index.ts",
+            "packages/api-server/src/routes/proxy.ts",
+            "packages/api-server/package.json",
+            "Dockerfile"
+          ]
+        }
+      },
+      "s5": {
+        "status": "completed",
+        "repair_loop_count": 0,
+        "output": {
+          "conclusion": "pass",
+          "score": 92,
+          "issues": { "p0_critical": 0, "p1_blocking": 0, "p2_recommended": 1 },
+          "spec_verification": { "sc_pass_rate": "6/6" }
+        }
+      },
+      "s6": {
+        "status": "completed",
+        "output": {
+          "automated_tests": { "vitest": "pass" },
+          "test_stats": { "total_tests": 249, "passed": 249, "failed": 0 },
+          "recommendation": "all_pass"
+        }
+      },
+      "s7": {
+        "status": "completed",
+        "output": {
+          "branch": "main",
+          "note": "Code already committed in e5835f7 and 894f72f, sdd_context finalized"
         }
       }
     }
