@@ -90,6 +90,41 @@ export function adminRoutes() {
   })
 
   /**
+   * PATCH /admin/users/:id/rate-limit — Set user rate limit tier
+   */
+  router.patch('/users/:id/rate-limit', async (c) => {
+    const userId = c.req.param('id')
+    const body = await c.req.json<{ tier: string }>()
+
+    // Validate tier exists
+    const { data: tierData, error: tierError } = await supabaseAdmin
+      .from('rate_limit_tiers')
+      .select('tier')
+      .eq('tier', body.tier)
+      .single()
+
+    if (tierError || !tierData) {
+      return Errors.invalidPlan()
+    }
+
+    // Update all active keys for this user
+    const { data: updatedKeys, error: keysError } = await supabaseAdmin
+      .from('api_keys')
+      .update({ rate_limit_tier: body.tier })
+      .eq('user_id', userId)
+      .eq('status', 'active')
+
+    if (keysError) {
+      console.error('update api_keys rate_limit_tier error:', keysError)
+      return Errors.internalError()
+    }
+
+    return c.json({
+      data: { user_id: userId, updated_keys: (updatedKeys as unknown[] | null)?.length ?? 0, tier: body.tier }
+    })
+  })
+
+  /**
    * GET /admin/topup-logs — Query topup logs with optional user filter
    */
   router.get('/topup-logs', async (c) => {
