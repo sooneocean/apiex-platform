@@ -11,6 +11,7 @@ interface AppLayoutProps {
 const navItems = [
   { href: '/admin/dashboard', label: 'Dashboard' },
   { href: '/admin/logs', label: 'Usage Logs' },
+  { href: '/admin/topup-logs', label: 'Topup Logs' },
 ]
 
 export default function AppLayout({ children }: AppLayoutProps) {
