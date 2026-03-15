@@ -1,3 +1,7 @@
+// OpenTelemetry must be initialized before any other imports
+import { initTelemetry } from './lib/telemetry.js'
+initTelemetry()
+
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { serve } from '@hono/node-server'

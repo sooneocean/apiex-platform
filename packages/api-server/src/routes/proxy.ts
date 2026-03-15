@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { stream as honoStream } from 'hono/streaming'
+import { trace, SpanStatusCode } from '@opentelemetry/api'
 import { RouterService } from '../services/RouterService.js'
 import { KeyService } from '../services/KeyService.js'
 import { RatesService } from '../services/RatesService.js'
@@ -9,6 +10,8 @@ import { InsufficientQuotaError, Errors } from '../lib/errors.js'
 import type { OpenAIRequest } from '../adapters/types.js'
 import { supabaseAdmin } from '../lib/supabase.js'
 import { rateLimiter } from '../lib/RateLimiter.js'
+
+const tracer = trace.getTracer('api-server', '0.1.0')
 
 /**
  * Supported model tags (OpenAI-compat aliases).
@@ -79,6 +82,14 @@ export function proxyRoutes() {
     }
 
     // Step 6 — forward to upstream
+    const llmSpan = tracer.startSpan('llm.proxy', {
+      attributes: {
+        'llm.model': route.tag,
+        'llm.provider': route.provider,
+        'llm.estimated_tokens': estimatedTokens,
+        'llm.stream': isStream,
+      },
+    })
     try {
       const result = await routerService.forward(route, body, isStream)
 
@@ -86,6 +97,15 @@ export function proxyRoutes() {
         // Non-streaming response
         const latencyMs = Date.now() - startTime
         const usage = result.data.usage
+
+        llmSpan.setAttributes({
+          'llm.total_tokens': usage.total_tokens,
+          'llm.prompt_tokens': usage.prompt_tokens,
+          'llm.completion_tokens': usage.completion_tokens,
+          'llm.latency_ms': latencyMs,
+        })
+        llmSpan.setStatus({ code: SpanStatusCode.OK })
+        llmSpan.end()
 
         // Fire-and-forget: settle quota + log usage + record spend
         keyService.settleQuota(apiKeyId, estimatedTokens, usage.total_tokens).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
@@ -109,9 +129,9 @@ export function proxyRoutes() {
               (usage.prompt_tokens / 1000) * rate.input_rate_per_1k * 100 +
               (usage.completion_tokens / 1000) * rate.output_rate_per_1k * 100
             )
-            keyService.recordSpend(apiKeyId, costCents).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
-            // Spend notification (fire-and-forget)
-            webhookService.checkAndNotifySpend(userId, apiKeyId).catch((err) => console.error('[proxy] webhook notification failed:', err))
+            keyService.recordSpend(apiKeyId, costCents)
+              .then(() => webhookService.checkAndNotifySpend(userId, apiKeyId).catch((err) => console.error('[proxy] webhook notification failed:', err)))
+              .catch((err) => console.error('[proxy] fire-and-forget failed:', err))
           }
         }).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
 
@@ -141,6 +161,15 @@ export function proxyRoutes() {
           // Stream complete — settle quota and log usage
           const latencyMs = Date.now() - startTime
           const usage = result.usage
+
+          llmSpan.setAttributes({
+            'llm.total_tokens': usage.total_tokens,
+            'llm.prompt_tokens': usage.prompt_tokens,
+            'llm.completion_tokens': usage.completion_tokens,
+            'llm.latency_ms': latencyMs,
+          })
+          llmSpan.setStatus({ code: SpanStatusCode.OK })
+          llmSpan.end()
 
           keyService.settleQuota(apiKeyId, estimatedTokens, usage.total_tokens).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
           rateLimiter.record(apiKeyId, usage.total_tokens, body.model)
@@ -176,6 +205,9 @@ export function proxyRoutes() {
     } catch (err) {
       // Upstream error — refund full quota + log error
       const latencyMs = Date.now() - startTime
+      llmSpan.setStatus({ code: SpanStatusCode.ERROR, message: String(err) })
+      llmSpan.setAttribute('llm.latency_ms', latencyMs)
+      llmSpan.end()
       keyService.settleQuota(apiKeyId, estimatedTokens, 0).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
       const logEntry: UsageLogEntry = {
         apiKeyId,

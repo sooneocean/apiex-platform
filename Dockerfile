@@ -38,4 +38,7 @@ EXPOSE 3000
 ENV NODE_ENV=production
 ENV PORT=3000
 
+# OpenTelemetry (optional - set to enable tracing)
+# ENV OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+
 CMD ["node", "packages/api-server/dist/index.js"]
