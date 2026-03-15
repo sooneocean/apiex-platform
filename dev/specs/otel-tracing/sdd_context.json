@@ -1,0 +1,37 @@
+{
+  "sdd_context": {
+    "version": "3.0.0",
+    "feature": "otel-tracing",
+    "feature_name": "OpenTelemetry 基礎追蹤",
+    "current_stage": "S4",
+    "spec_mode": "quick",
+    "spec_mode_reason": "基礎設施配置為主，邏輯簡單，Quick 足夠",
+    "work_type": "new_feature",
+    "spec_folder": "dev/specs/otel-tracing",
+    "execution_mode": "autopilot",
+    "status": "in_progress",
+    "started_at": "2026-03-15T18:00:00+08:00",
+    "last_updated": "2026-03-15T18:00:00+08:00",
+    "last_updated_by": "requirement-analyst",
+    "stages": {
+      "s0": {
+        "status": "completed",
+        "agent": "requirement-analyst",
+        "output": {
+          "work_type": "new_feature",
+          "requirement": "加入 OpenTelemetry 基礎追蹤（Tier 1 MVP）",
+          "goal": "API 請求和 LLM 代理呼叫有完整 trace，可透過 OTLP 匯出到任何後端",
+          "success_criteria": [
+            "SC-1: OTel SDK 在 api-server 啟動時初始化",
+            "SC-2: 每個 HTTP 請求自動產生 trace span",
+            "SC-3: LLM proxy 呼叫有獨立 child span（含 model, tokens, latency）",
+            "SC-4: OTEL_EXPORTER_OTLP_ENDPOINT 未設定時安靜跳過（不影響啟動）",
+            "SC-5: 現有測試全部通過",
+            "SC-6: Dockerfile 包含 OTel 環境變數配置"
+          ],
+          "scope_out": ["前端 RUM", "結構化日誌", "Prometheus endpoint", "Grafana 儀表板", "自訂 business metrics"]
+        }
+      }
+    }
+  }
+}
