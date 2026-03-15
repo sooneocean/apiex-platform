@@ -54,5 +54,6 @@ export const apiKeyAuth = createMiddleware(async (c, next) => {
   c.set('apiKey', data)
   c.set('apiKeyId', data.id as string)
   c.set('userId', data.user_id as string)
+  c.set('apiKeyTier', (data.rate_limit_tier as string) ?? 'free')
   await next()
 })
