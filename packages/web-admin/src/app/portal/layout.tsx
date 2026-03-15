@@ -2,22 +2,25 @@
 
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 import { supabase } from '@/lib/supabase'
+import LocaleSwitcher from '@/components/LocaleSwitcher'
 
 interface PortalLayoutProps {
   children: React.ReactNode
 }
 
-const navItems = [
-  { href: '/portal/dashboard', label: 'Dashboard' },
-  { href: '/portal/topup', label: '儲值' },
-  { href: '/portal/logs', label: '充值記錄' },
-  { href: '/portal/settings/webhooks', label: 'Webhook' },
-]
-
 export default function PortalLayout({ children }: PortalLayoutProps) {
+  const t = useTranslations('portalNav')
   const router = useRouter()
   const pathname = usePathname()
+
+  const navItems = [
+    { href: '/portal/dashboard', label: t('dashboard') },
+    { href: '/portal/topup', label: t('topup') },
+    { href: '/portal/logs', label: t('logs') },
+    { href: '/portal/settings/webhooks', label: t('webhooks') },
+  ]
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -47,11 +50,14 @@ export default function PortalLayout({ children }: PortalLayoutProps) {
                 </Link>
               )
             })}
+            <div className="ml-2 pl-2 border-l border-gray-200">
+              <LocaleSwitcher />
+            </div>
             <button
               onClick={handleLogout}
               className="rounded-md px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
             >
-              登出
+              {t('logout')}
             </button>
           </div>
         </div>

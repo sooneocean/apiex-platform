@@ -2,27 +2,30 @@
 
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 import { supabase } from '@/lib/supabase'
+import LocaleSwitcher from './LocaleSwitcher'
 
 interface AppLayoutProps {
   children: React.ReactNode
 }
 
-const navItems = [
-  { href: '/admin/dashboard', label: 'Dashboard' },
-  { href: '/admin/analytics', label: 'Analytics' },
-  { href: '/admin/logs', label: 'Usage Logs' },
-  { href: '/admin/topup-logs', label: 'Topup Logs' },
-  { href: '/admin/webhooks', label: 'Webhooks' },
-  { href: '/admin/settings/rates', label: 'Settings: Rates' },
-  { href: '/admin/settings/models', label: 'Settings: Models' },
-  { href: '/admin/settings/routes', label: 'Settings: Routes' },
-  { href: '/admin/settings/webhooks', label: 'Settings: Webhooks' },
-]
-
 export default function AppLayout({ children }: AppLayoutProps) {
+  const t = useTranslations('nav')
   const router = useRouter()
   const pathname = usePathname()
+
+  const navItems = [
+    { href: '/admin/dashboard', label: t('dashboard') },
+    { href: '/admin/analytics', label: t('analytics') },
+    { href: '/admin/logs', label: t('logs') },
+    { href: '/admin/topup-logs', label: t('topupLogs') },
+    { href: '/admin/webhooks', label: t('webhooks') },
+    { href: '/admin/settings/rates', label: t('settingsRates') },
+    { href: '/admin/settings/models', label: t('settingsModels') },
+    { href: '/admin/settings/routes', label: t('settingsRoutes') },
+    { href: '/admin/settings/webhooks', label: t('settingsWebhooks') },
+  ]
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -54,12 +57,15 @@ export default function AppLayout({ children }: AppLayoutProps) {
             )
           })}
         </nav>
-        <div className="px-3 py-4 border-t border-gray-700">
+        <div className="px-3 py-3 border-t border-gray-700 space-y-2">
+          <div className="px-1">
+            <LocaleSwitcher />
+          </div>
           <button
             onClick={handleLogout}
             className="w-full text-left rounded-md px-3 py-2 text-sm font-medium text-gray-300 hover:bg-gray-800 hover:text-white transition-colors"
           >
-            登出
+            {t('logout')}
           </button>
         </div>
       </aside>

@@ -2,9 +2,12 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { supabase } from '@/lib/supabase'
+import LocaleSwitcher from '@/components/LocaleSwitcher'
 
 export default function LoginPage() {
+  const t = useTranslations('login')
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
