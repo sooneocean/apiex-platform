@@ -276,7 +276,18 @@
     "timeColumn": "Time",
     "notLoggedIn": "Not logged in",
     "quotaAlert": "Quota alert {threshold}%",
-    "testBadge": "Test"
+    "testBadge": "Test",
+    "adminTitle": "Webhooks Overview",
+    "totalCount": "{total} configurations",
+    "noWebhooks": "No webhook configurations yet",
+    "userIdColumn": "User ID",
+    "urlColumn": "URL",
+    "eventsColumn": "Events",
+    "statusColumn": "Status",
+    "createdAtColumn": "Created",
+    "active": "Active",
+    "inactive": "Inactive",
+    "loadFailed": "Failed to load webhooks"
   },
   "localeSwitcher": {
     "label": "Language"

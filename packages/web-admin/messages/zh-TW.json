@@ -276,7 +276,18 @@
     "timeColumn": "時間",
     "notLoggedIn": "未登入",
     "quotaAlert": "配額告警 {threshold}%",
-    "testBadge": "測試"
+    "testBadge": "測試",
+    "adminTitle": "Webhooks 總覽",
+    "totalCount": "共 {total} 筆設定",
+    "noWebhooks": "目前無任何 Webhook 設定",
+    "userIdColumn": "User ID",
+    "urlColumn": "URL",
+    "eventsColumn": "Events",
+    "statusColumn": "狀態",
+    "createdAtColumn": "建立時間",
+    "active": "啟用",
+    "inactive": "停用",
+    "loadFailed": "載入 Webhooks 失敗"
   },
   "localeSwitcher": {
     "label": "語言"

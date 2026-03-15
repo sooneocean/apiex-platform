@@ -19,6 +19,7 @@ vi.mock('../../lib/supabase.js', () => ({
   supabaseClient: {},
 }))
 
+
 import { WebhookService } from '../WebhookService.js'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -43,6 +44,8 @@ describe('WebhookService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     service = new WebhookService()
+    // Skip SSRF DNS validation in tests
+    vi.spyOn(service, '_validateUrlSafety').mockResolvedValue(undefined)
   })
 
   afterEach(() => {
@@ -81,7 +84,7 @@ describe('WebhookService', () => {
   // ── upsertConfig ───────────────────────────────────────────────────────────
 
   describe('upsertConfig', () => {
-    it('應建立或更新 webhook 設定', async () => {
+    it('應建立或更新 webhook 設定（回傳不含 secret）', async () => {
       const config = {
         id: 'cfg-1',
         user_id: 'user-1',
@@ -95,7 +98,9 @@ describe('WebhookService', () => {
       mockFrom.mockReturnValue(chain)
 
       const result = await service.upsertConfig('user-1', 'https://example.com/hook', 'mysecret')
-      expect(result).toEqual(config)
+      expect(result.secret).toBeNull()
+      expect(result.url).toBe('https://example.com/hook')
+      expect(result.id).toBe('cfg-1')
     })
 
     it('URL 格式無效時應拋出錯誤', async () => {
@@ -121,14 +126,14 @@ describe('WebhookService', () => {
     const configId = 'cfg-1'
 
     it('無 webhook 設定時應靜默返回 null', async () => {
-      const getConfigSpy = vi.spyOn(service, 'getConfig').mockResolvedValue(null)
+      const spy = vi.spyOn(service as never, '_getConfigWithSecret').mockResolvedValue(null)
       const result = await service.sendNotification(userId, 'quota_warning', { key_id: 'k1' })
       expect(result).toBeNull()
-      getConfigSpy.mockRestore()
+      spy.mockRestore()
     })
 
     it('is_active=false 時應靜默返回 null', async () => {
-      vi.spyOn(service, 'getConfig').mockResolvedValue({
+      vi.spyOn(service as never, '_getConfigWithSecret').mockResolvedValue({
         id: configId,
         user_id: userId,
         url: 'https://example.com/hook',
@@ -142,7 +147,7 @@ describe('WebhookService', () => {
     })
 
     it('應 POST 到 webhook URL 並記錄 log（無 secret）', async () => {
-      vi.spyOn(service, 'getConfig').mockResolvedValue({
+      vi.spyOn(service as never, '_getConfigWithSecret').mockResolvedValue({
         id: configId,
         user_id: userId,
         url: 'https://example.com/hook',
@@ -182,7 +187,7 @@ describe('WebhookService', () => {
     })
 
     it('有 secret 時應附加 X-Webhook-Signature header', async () => {
-      vi.spyOn(service, 'getConfig').mockResolvedValue({
+      vi.spyOn(service as never, '_getConfigWithSecret').mockResolvedValue({
         id: configId,
         user_id: userId,
         url: 'https://example.com/hook',
@@ -209,7 +214,7 @@ describe('WebhookService', () => {
     })
 
     it('fetch 拋出錯誤時應記錄 log（status_code=null）並靜默返回', async () => {
-      vi.spyOn(service, 'getConfig').mockResolvedValue({
+      vi.spyOn(service as never, '_getConfigWithSecret').mockResolvedValue({
         id: configId,
         user_id: userId,
         url: 'https://example.com/hook',

@@ -111,12 +111,12 @@ export function proxyRoutes() {
             )
             keyService.recordSpend(apiKeyId, costCents).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
             // Spend notification (fire-and-forget)
-            webhookService.checkAndNotifySpend(userId, apiKeyId).catch(() => {})
+            webhookService.checkAndNotifySpend(userId, apiKeyId).catch((err) => console.error('[proxy] webhook notification failed:', err))
           }
         }).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
 
         // Quota notification (fire-and-forget)
-        webhookService.checkAndNotifyQuota(userId, apiKeyId).catch(() => {})
+        webhookService.checkAndNotifyQuota(userId, apiKeyId).catch((err) => console.error('[proxy] webhook notification failed:', err))
 
         return c.json(result.data)
       }
@@ -165,12 +165,12 @@ export function proxyRoutes() {
               )
               keyService.recordSpend(apiKeyId, costCents).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
               // Spend notification (fire-and-forget)
-              webhookService.checkAndNotifySpend(userId, apiKeyId).catch(() => {})
+              webhookService.checkAndNotifySpend(userId, apiKeyId).catch((err) => console.error('[proxy] webhook notification failed:', err))
             }
           }).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
 
           // Quota notification (fire-and-forget)
-          webhookService.checkAndNotifyQuota(userId, apiKeyId).catch(() => {})
+          webhookService.checkAndNotifyQuota(userId, apiKeyId).catch((err) => console.error('[proxy] webhook notification failed:', err))
         }
       })
     } catch (err) {

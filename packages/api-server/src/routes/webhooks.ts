@@ -45,8 +45,12 @@ export function webhookRoutes() {
       )
       return c.json({ data: config })
     } catch (err) {
-      if (err instanceof Error && err.message.includes('Invalid webhook URL')) {
-        return Errors.invalidParam('Invalid webhook URL format. Must be a valid http/https URL.')
+      if (err instanceof Error && (
+        err.message.includes('Invalid webhook URL') ||
+        err.message.includes('Invalid event') ||
+        err.message.includes('events must not be empty')
+      )) {
+        return Errors.invalidParam(err.message)
       }
       throw err
     }

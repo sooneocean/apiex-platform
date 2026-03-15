@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { useTranslations } from 'next-intl'
 import { supabase } from '@/lib/supabase'
 import {
   makeWebhooksApi,
@@ -44,6 +45,8 @@ function Toast({ type, message, onClose }: ToastProps) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function WebhooksSettingsPage() {
+  const t = useTranslations('webhooks')
+  const tc = useTranslations('common')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
@@ -105,13 +108,13 @@ export default function WebhooksSettingsPage() {
 
   const handleSave = async () => {
     if (!url.trim()) {
-      showToast('error', '請填入 Webhook URL')
+      showToast('error', t('urlRequired'))
       return
     }
     try {
       new URL(url)
     } catch {
-      showToast('error', 'URL 格式無效，請輸入 http:// 或 https:// 開頭的網址')
+      showToast('error', t('urlInvalid'))
       return
     }
 
@@ -126,7 +129,7 @@ export default function WebhooksSettingsPage() {
         is_active: isActive,
       })
       setConfig(resp.data)
-      showToast('success', 'Webhook 設定已儲存')
+      showToast('success', t('saved'))
       await loadData()
     } catch (err) {
       const msg = err instanceof Error ? err.message : '儲存失敗'
@@ -138,7 +141,7 @@ export default function WebhooksSettingsPage() {
 
   const handleDelete = async () => {
     if (!config) return
-    if (!window.confirm('確定要刪除 Webhook 設定？此操作無法復原。')) return
+    if (!window.confirm(t('confirmDelete'))) return
 
     setDeleting(true)
     try {
@@ -151,7 +154,7 @@ export default function WebhooksSettingsPage() {
       setSelectedEvents(NOTIFICATION_EVENTS.map((e) => e.value))
       setIsActive(true)
       setLogs([])
-      showToast('success', 'Webhook 設定已刪除')
+      showToast('success', t('deleted'))
     } catch (err) {
       const msg = err instanceof Error ? err.message : '刪除失敗'
       showToast('error', msg)
@@ -162,7 +165,7 @@ export default function WebhooksSettingsPage() {
 
   const handleTest = async () => {
     if (!config) {
-      showToast('error', '請先儲存 Webhook 設定後再測試')
+      showToast('error', t('saveBefore'))
       return
     }
     setTesting(true)
@@ -172,7 +175,7 @@ export default function WebhooksSettingsPage() {
       const api = makeWebhooksApi(token)
       const resp = await api.test()
       setTestResult({ status: resp.data.status_code, ok: (resp.data.status_code ?? 0) >= 200 && (resp.data.status_code ?? 0) < 300 })
-      showToast('success', `測試推播已發送，狀態碼：${resp.data.status_code ?? '無回應'}`)
+      showToast('success', t('testSent', { code: String(resp.data.status_code ?? tc('noResponse')) }))
       await loadData()
     } catch (err) {
       const msg = err instanceof Error ? err.message : '測試失敗'
@@ -202,14 +205,14 @@ export default function WebhooksSettingsPage() {
 
   return (
     <div className="p-8 max-w-2xl">
-      <h1 className="text-xl font-semibold text-gray-900 mb-6">Webhook 設定</h1>
+      <h1 className="text-xl font-semibold text-gray-900 mb-6">{t('title')}</h1>
 
       {/* Config Form */}
       <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-5 mb-6">
         {/* URL */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Webhook URL <span className="text-red-500">*</span>
+            {t('urlLabel')} <span className="text-red-500">*</span>
           </label>
           <input
             type="url"
@@ -223,20 +226,20 @@ export default function WebhooksSettingsPage() {
         {/* Secret */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Secret（可選，HMAC-SHA256 簽名用）
+            {t('secretLabel')}
           </label>
           <input
             type="password"
             value={secret}
             onChange={(e) => setSecret(e.target.value)}
-            placeholder="留空表示不使用簽名驗證"
+            placeholder={t('secretPlaceholder')}
             className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
 
         {/* Events */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">訂閱事件</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">{t('eventsLabel')}</label>
           <div className="space-y-2">
             {NOTIFICATION_EVENTS.map((e) => (
               <label key={e.value} className="flex items-center gap-2 cursor-pointer">
@@ -283,7 +286,7 @@ export default function WebhooksSettingsPage() {
             disabled={saving}
             className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
           >
-            {saving ? '儲存中...' : '儲存設定'}
+            {saving ? t('saving') : t('saveConfig')}
           </button>
 
           {config && (
@@ -293,7 +296,7 @@ export default function WebhooksSettingsPage() {
                 disabled={testing}
                 className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-200 disabled:opacity-50 transition-colors"
               >
-                {testing ? '測試中...' : '測試推播'}
+                {testing ? t('testing') : t('testPush')}
               </button>
 
               <button
@@ -301,7 +304,7 @@ export default function WebhooksSettingsPage() {
                 disabled={deleting}
                 className="px-4 py-2 bg-red-50 text-red-600 text-sm font-medium rounded-md hover:bg-red-100 disabled:opacity-50 transition-colors"
               >
-                {deleting ? '刪除中...' : '刪除設定'}
+                {deleting ? t('deleting') : t('deleteConfig')}
               </button>
             </>
           )}
@@ -324,17 +327,17 @@ export default function WebhooksSettingsPage() {
       {/* Logs */}
       {config && (
         <div>
-          <h2 className="text-base font-medium text-gray-900 mb-3">推播記錄（最近 20 筆）</h2>
+          <h2 className="text-base font-medium text-gray-900 mb-3">{t('logsTitle')}</h2>
           {logs.length === 0 ? (
-            <p className="text-sm text-gray-500">尚無推播記錄</p>
+            <p className="text-sm text-gray-500">{t('noLogs')}</p>
           ) : (
             <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">事件</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">狀態碼</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">時間</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">{t('eventColumn')}</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">{t('statusCodeColumn')}</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">{t('timeColumn')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -349,7 +352,7 @@ export default function WebhooksSettingsPage() {
                               : 'bg-red-100 text-red-700'
                           }`}
                         >
-                          {log.status_code ?? '無回應'}
+                          {log.status_code ?? tc('noResponse')}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-500">

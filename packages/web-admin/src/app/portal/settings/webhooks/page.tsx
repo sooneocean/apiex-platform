@@ -1,34 +1,20 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useTranslations } from 'next-intl'
 import { supabase } from '@/lib/supabase'
-import { apiGet, apiPost, apiDelete } from '@/lib/api'
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface WebhookConfig {
-  id: string
-  user_id: string
-  url: string
-  secret: string | null
-  events: string[]
-  is_active: boolean
-  created_at: string
-}
-
-interface WebhookLog {
-  id: string
-  webhook_config_id: string
-  event: string
-  payload: Record<string, unknown>
-  status_code: number | null
-  response_body: string | null
-  created_at: string
-}
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
+import {
+  makeWebhooksApi,
+  NOTIFICATION_EVENTS,
+  type WebhookConfig,
+  type WebhookLog,
+  type NotificationEventType,
+} from '@/lib/api'
 
 export default function WebhookSettingsPage() {
+  const t = useTranslations('webhooks')
+  const tc = useTranslations('common')
+
   const [config, setConfig] = useState<WebhookConfig | null>(null)
   const [logs, setLogs] = useState<WebhookLog[]>([])
   const [loading, setLoading] = useState(true)
@@ -38,83 +24,87 @@ export default function WebhookSettingsPage() {
   const [error, setError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
 
-  // Form state
   const [url, setUrl] = useState('')
   const [secret, setSecret] = useState('')
   const [showSecret, setShowSecret] = useState(false)
+  const [selectedEvents, setSelectedEvents] = useState<NotificationEventType[]>(
+    NOTIFICATION_EVENTS.map((e) => e.value)
+  )
 
-  const getToken = useCallback(async (): Promise<string | null> => {
+  const getToken = useCallback(async () => {
     const { data } = await supabase.auth.getSession()
-    return data.session?.access_token ?? null
+    return data.session?.access_token ?? ''
   }, [])
 
-  const loadConfig = useCallback(async () => {
-    const token = await getToken()
-    if (!token) return
-
+  const loadData = useCallback(async () => {
+    setLoading(true)
     try {
-      const res = await apiGet<{ data: WebhookConfig | null }>('/webhooks', token)
-      if (res.data) {
-        setConfig(res.data)
-        setUrl(res.data.url)
-        setSecret(res.data.secret ?? '')
+      const token = await getToken()
+      const api = makeWebhooksApi(token)
+      const resp = await api.get()
+      const existing = resp.data
+
+      if (existing) {
+        setConfig(existing)
+        setUrl(existing.url)
+        setSelectedEvents(existing.events as NotificationEventType[])
+
+        const logsResp = await api.logs(existing.id, 20)
+        setLogs(logsResp.data)
+      } else {
+        setConfig(null)
+        setLogs([])
       }
-    } catch {
-      // 無設定時靜默
-    }
-  }, [getToken])
-
-  const loadLogs = useCallback(async (configId: string) => {
-    const token = await getToken()
-    if (!token) return
-
-    try {
-      const res = await apiGet<{ data: WebhookLog[] }>(`/webhooks/${configId}/logs`, token)
-      setLogs(res.data ?? [])
-    } catch {
-      // 忽略
-    }
-  }, [getToken])
-
-  useEffect(() => {
-    async function init() {
-      setLoading(true)
-      await loadConfig()
+    } catch (err) {
+      console.error('Failed to load webhook config:', err)
+      setError(err instanceof Error ? err.message : tc('networkError'))
+    } finally {
       setLoading(false)
     }
-    init()
-  }, [loadConfig])
+  }, [getToken, tc])
 
   useEffect(() => {
-    if (config) {
-      loadLogs(config.id)
-    }
-  }, [config, loadLogs])
+    loadData()
+  }, [loadData])
 
   function showSuccess(msg: string) {
     setSuccessMsg(msg)
     setTimeout(() => setSuccessMsg(null), 3000)
   }
 
+  const toggleEvent = (event: NotificationEventType) => {
+    setSelectedEvents((prev) =>
+      prev.includes(event) ? prev.filter((e) => e !== event) : [...prev, event]
+    )
+  }
+
   async function handleSave() {
     if (!url.trim()) {
-      setError('請輸入 Webhook URL')
+      setError(t('urlRequired'))
       return
     }
+    try {
+      new URL(url)
+    } catch {
+      setError(t('urlInvalid'))
+      return
+    }
+
     setSaving(true)
     setError(null)
     try {
       const token = await getToken()
-      if (!token) throw new Error('未登入')
-      const res = await apiPost<{ data: WebhookConfig }>(
-        '/webhooks',
-        { url: url.trim(), secret: secret.trim() || undefined },
-        token
-      )
-      setConfig(res.data)
-      showSuccess('Webhook 設定已儲存')
+      const api = makeWebhooksApi(token)
+      const resp = await api.upsert({
+        url: url.trim(),
+        ...(secret.trim() ? { secret: secret.trim() } : {}),
+        events: selectedEvents,
+      })
+      setConfig(resp.data)
+      showSuccess(t('saved'))
+      await loadData()
     } catch (e) {
-      setError(e instanceof Error ? e.message : '儲存失敗')
+      setError(e instanceof Error ? e.message : t('saveFailed'))
     } finally {
       setSaving(false)
     }
@@ -122,38 +112,41 @@ export default function WebhookSettingsPage() {
 
   async function handleDelete() {
     if (!config) return
-    if (!confirm('確定要刪除此 Webhook 設定？')) return
+    if (!confirm(t('confirmDeleteAlt'))) return
     setDeleting(true)
     setError(null)
     try {
       const token = await getToken()
-      if (!token) throw new Error('未登入')
-      await apiDelete(`/webhooks/${config.id}`, token)
+      const api = makeWebhooksApi(token)
+      await api.remove(config.id)
       setConfig(null)
       setUrl('')
       setSecret('')
+      setSelectedEvents(NOTIFICATION_EVENTS.map((e) => e.value))
       setLogs([])
-      showSuccess('Webhook 設定已刪除')
+      showSuccess(t('deleted'))
     } catch (e) {
-      setError(e instanceof Error ? e.message : '刪除失敗')
+      setError(e instanceof Error ? e.message : t('deleteFailed'))
     } finally {
       setDeleting(false)
     }
   }
 
   async function handleTest() {
+    if (!config) {
+      setError(t('saveBefore'))
+      return
+    }
     setTesting(true)
     setError(null)
     try {
       const token = await getToken()
-      if (!token) throw new Error('未登入')
-      const res = await apiPost<{ data: WebhookLog }>('/webhooks/test', {}, token)
-      showSuccess(`測試推播完成，HTTP ${res.data.status_code ?? '網路錯誤'}`)
-      if (config) {
-        await loadLogs(config.id)
-      }
+      const api = makeWebhooksApi(token)
+      const resp = await api.test()
+      showSuccess(t('testComplete', { code: resp.data.status_code ?? tc('noResponse') }))
+      await loadData()
     } catch (e) {
-      setError(e instanceof Error ? e.message : '測試失敗')
+      setError(e instanceof Error ? e.message : t('testFail'))
     } finally {
       setTesting(false)
     }
@@ -161,17 +154,15 @@ export default function WebhookSettingsPage() {
 
   if (loading) {
     return (
-      <div className="text-sm text-gray-500 py-8 text-center">載入中...</div>
+      <div className="text-sm text-gray-500 py-8 text-center">{tc('loading')}</div>
     )
   }
 
   return (
     <div className="max-w-2xl">
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-gray-900">Webhook 通知設定</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          當 API Key 配額消耗達到 80%、90%、100% 時，系統會推播通知到你設定的 Webhook URL。
-        </p>
+        <h1 className="text-xl font-semibold text-gray-900">{t('notificationTitle')}</h1>
+        <p className="mt-1 text-sm text-gray-500">{t('notificationSubtitle')}</p>
       </div>
 
       {error && (
@@ -185,15 +176,13 @@ export default function WebhookSettingsPage() {
         </div>
       )}
 
-      {/* 設定表單 */}
       <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm mb-6">
-        <h2 className="text-base font-medium text-gray-800 mb-4">Webhook 設定</h2>
+        <h2 className="text-base font-medium text-gray-800 mb-4">{t('configSection')}</h2>
 
         <div className="space-y-4">
-          {/* URL */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Webhook URL <span className="text-red-500">*</span>
+              {t('urlLabel')} <span className="text-red-500">*</span>
             </label>
             <input
               type="url"
@@ -204,17 +193,16 @@ export default function WebhookSettingsPage() {
             />
           </div>
 
-          {/* Secret */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Signing Secret（可選）
+              {t('signingSecretLabel')}
             </label>
             <div className="relative">
               <input
                 type={showSecret ? 'text' : 'password'}
                 value={secret}
                 onChange={(e) => setSecret(e.target.value)}
-                placeholder="用於 HMAC-SHA256 簽名驗證"
+                placeholder={t('signingSecretPlaceholder')}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 pr-20 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
               />
               <button
@@ -222,105 +210,102 @@ export default function WebhookSettingsPage() {
                 onClick={() => setShowSecret(!showSecret)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500 hover:text-gray-700"
               >
-                {showSecret ? '隱藏' : '顯示'}
+                {showSecret ? tc('hide') : tc('show')}
               </button>
             </div>
-            <p className="mt-1 text-xs text-gray-400">
-              設定後，每次推播的 Header 會附帶 <code className="bg-gray-100 px-1 rounded">X-Webhook-Signature: sha256=...</code>
-            </p>
+            <p className="mt-1 text-xs text-gray-400">{t('signingSecretHint')}</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">{t('eventsLabel')}</label>
+            <div className="space-y-2">
+              {NOTIFICATION_EVENTS.map((e) => (
+                <label key={e.value} className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selectedEvents.includes(e.value)}
+                    onChange={() => toggleEvent(e.value)}
+                    className="rounded border-gray-300 text-gray-900 focus:ring-gray-900"
+                  />
+                  <span className="text-sm text-gray-700">{e.label}</span>
+                  <span className="text-xs text-gray-400 font-mono">{e.value}</span>
+                </label>
+              ))}
+            </div>
           </div>
         </div>
 
         <div className="flex items-center gap-3 mt-6">
           <button
+            type="button"
             onClick={handleSave}
             disabled={saving}
             className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {saving ? '儲存中...' : config ? '更新設定' : '儲存設定'}
+            {saving ? t('saving') : config ? t('updateConfig') : t('saveConfig')}
           </button>
 
           {config && (
             <>
               <button
+                type="button"
                 onClick={handleTest}
                 disabled={testing}
                 className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                {testing ? '發送中...' : '測試推播'}
+                {testing ? t('sending') : t('testPush')}
               </button>
               <button
+                type="button"
                 onClick={handleDelete}
                 disabled={deleting}
                 className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                {deleting ? '刪除中...' : '刪除設定'}
+                {deleting ? t('deleting') : t('deleteConfig')}
               </button>
             </>
           )}
         </div>
       </div>
 
-      {/* 推播記錄 */}
       {config && (
         <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-medium text-gray-800">推播記錄</h2>
-            <button
-              onClick={() => loadLogs(config.id)}
-              className="text-xs text-gray-500 hover:text-gray-700"
-            >
-              重新整理
-            </button>
-          </div>
+          <h2 className="text-base font-medium text-gray-800 mb-4">{t('logsSection')}</h2>
 
           {logs.length === 0 ? (
-            <p className="text-sm text-gray-400 py-4 text-center">尚無推播記錄</p>
+            <p className="text-sm text-gray-400 py-4 text-center">{t('noLogs')}</p>
           ) : (
-            <div className="space-y-2">
-              {logs.map((log) => (
-                <div
-                  key={log.id}
-                  className="flex items-start justify-between rounded-lg border border-gray-100 bg-gray-50 px-4 py-3 text-sm"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span
-                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                          log.status_code && log.status_code >= 200 && log.status_code < 300
-                            ? 'bg-green-100 text-green-700'
-                            : 'bg-red-100 text-red-700'
-                        }`}
-                      >
-                        {log.status_code ?? '網路錯誤'}
-                      </span>
-                      <span className="text-gray-500 text-xs">
-                        {log.payload?.threshold != null
-                          ? `配額告警 ${log.payload.threshold}%`
-                          : log.event}
-                      </span>
-                      {Boolean((log.payload as Record<string, unknown>)?.is_test) && (
-                        <span className="inline-flex items-center rounded-full bg-blue-100 text-blue-700 px-2 py-0.5 text-xs font-medium">
-                          測試
+            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">{t('eventColumn')}</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">{t('statusCodeColumn')}</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">{t('timeColumn')}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {logs.map((log) => (
+                    <tr key={log.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 font-mono text-xs">{log.event}</td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                            log.status_code && log.status_code >= 200 && log.status_code < 300
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-red-100 text-red-700'
+                          }`}
+                        >
+                          {log.status_code ?? tc('noResponse')}
                         </span>
-                      )}
-                    </div>
-                    {log.response_body && (
-                      <p className="text-xs text-gray-400 truncate max-w-xs">
-                        {log.response_body}
-                      </p>
-                    )}
-                  </div>
-                  <span className="text-xs text-gray-400 whitespace-nowrap ml-4">
-                    {new Date(log.created_at).toLocaleString('zh-TW', {
-                      month: '2-digit',
-                      day: '2-digit',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </span>
-                </div>
-              ))}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-500">
+                        {new Date(log.created_at).toLocaleString('zh-TW')}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>

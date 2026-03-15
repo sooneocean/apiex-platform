@@ -1,12 +1,15 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { useTranslations } from 'next-intl'
 import { supabase } from '@/lib/supabase'
 import { makeAdminWebhooksApi, type WebhookConfig, type Pagination } from '@/lib/api'
 
 const PAGE_LIMIT = 20
 
 export default function AdminWebhooksPage() {
+  const t = useTranslations('webhooks')
+  const tc = useTranslations('common')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [webhooks, setWebhooks] = useState<WebhookConfig[]>([])
@@ -28,7 +31,7 @@ export default function AdminWebhooksPage() {
       setWebhooks(resp.data)
       setPagination(resp.pagination)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to load webhooks'
+      const msg = err instanceof Error ? err.message : t('loadFailed')
       setError(msg)
     } finally {
       setLoading(false)
@@ -44,8 +47,8 @@ export default function AdminWebhooksPage() {
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-semibold text-gray-900">Webhooks 總覽</h1>
-        <span className="text-sm text-gray-500">共 {pagination.total} 筆設定</span>
+        <h1 className="text-xl font-semibold text-gray-900">{t('adminTitle')}</h1>
+        <span className="text-sm text-gray-500">{loading ? '' : t('totalCount', { total: pagination.total })}</span>
       </div>
 
       {error && (
@@ -61,17 +64,17 @@ export default function AdminWebhooksPage() {
           ))}
         </div>
       ) : webhooks.length === 0 ? (
-        <div className="text-center py-16 text-gray-500 text-sm">目前無任何 Webhook 設定</div>
+        <div className="text-center py-16 text-gray-500 text-sm">{t('noWebhooks')}</div>
       ) : (
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">User ID</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">URL</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Events</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">狀態</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">建立時間</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">{t('userIdColumn')}</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">{t('urlColumn')}</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">{t('eventsColumn')}</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">{t('statusColumn')}</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">{t('createdAtColumn')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -105,7 +108,7 @@ export default function AdminWebhooksPage() {
                           : 'bg-gray-100 text-gray-500'
                       }`}
                     >
-                      {wh.is_active ? '啟用' : '停用'}
+                      {wh.is_active ? t('active') : t('inactive')}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-500">
@@ -130,14 +133,14 @@ export default function AdminWebhooksPage() {
               disabled={page <= 1}
               className="px-3 py-1.5 text-sm rounded-md border border-gray-300 disabled:opacity-50 hover:bg-gray-50 transition-colors"
             >
-              上一頁
+              {tc('prevPage')}
             </button>
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages}
               className="px-3 py-1.5 text-sm rounded-md border border-gray-300 disabled:opacity-50 hover:bg-gray-50 transition-colors"
             >
-              下一頁
+              {tc('nextPage')}
             </button>
           </div>
         </div>

@@ -1,0 +1,69 @@
+{
+  "sdd_context": {
+    "version": "3.0.0",
+    "feature": "webhook-security-fix",
+    "feature_name": "Webhook 安全修復（cross-validate P0+P1）",
+    "current_stage": "S7_completed",
+    "spec_mode": "quick",
+    "spec_mode_reason": "bugfix，修復點明確，無新 DB/API 設計",
+    "work_type": "bugfix",
+    "spec_folder": "dev/specs/webhook-security-fix",
+    "execution_mode": "autopilot",
+    "status": "completed",
+    "completed_at": "2026-03-15T14:30:00+08:00",
+    "started_at": "2026-03-15T14:00:00+08:00",
+    "last_updated": "2026-03-15T14:00:00+08:00",
+    "last_updated_by": "requirement-analyst",
+    "stages": {
+      "s0": {
+        "status": "completed",
+        "agent": "requirement-analyst",
+        "started_at": "2026-03-15T14:00:00+08:00",
+        "completed_at": "2026-03-15T14:05:00+08:00",
+        "output": {
+          "work_type": "bugfix",
+          "requirement": "修復 cross-validate 發現的 3 個 P0 + 4 個 P1 安全/品質問題",
+          "goal": "消除安全漏洞（secret 洩漏、SSRF），修正前端一致性問題，提升可觀測性",
+          "pain_points": [
+            "GET /webhooks 洩漏 HMAC secret 明文",
+            "Webhook URL 無 SSRF 防護",
+            "Portal 頁繞過統一 API client",
+            "webhook fetch 無 timeout",
+            "events 陣列無後端驗證",
+            "proxy.ts webhook 錯誤被靜默吞掉",
+            "新頁面未接入 i18n"
+          ],
+          "success_criteria": [
+            "SC-1: GET /webhooks 回傳不含 secret 欄位",
+            "SC-2: 私有 IP/localhost URL 被拒絕",
+            "SC-3: Portal 頁使用 makeWebhooksApi 且傳送 events",
+            "SC-4: webhook fetch 有 10s timeout",
+            "SC-5: 無效 event type 被後端拒絕",
+            "SC-6: proxy.ts webhook catch 有 console.error",
+            "SC-7: 設定頁和總覽頁使用 useTranslations"
+          ],
+          "scope_in": [
+            "FA-A: 後端安全修復（F1 secret、F2 SSRF、F4 timeout、F5 events、F6 catch）",
+            "FA-B: 前端修復（F3 Portal 頁、F7 i18n）"
+          ],
+          "scope_out": [
+            "Dedup TOCTOU 原子操作",
+            "N+1 查詢合併",
+            "notification_logs 清理 cron",
+            "新增測試覆蓋"
+          ],
+          "constraints": [
+            "不改變 API 契約（僅移除 secret 欄位）",
+            "SSRF 過濾需考慮 DNS rebinding"
+          ],
+          "functional_areas": [
+            { "id": "FA-A", "name": "後端安全修復", "description": "secret 排除、SSRF 過濾、timeout、events 驗證、error logging", "independence": "high" },
+            { "id": "FA-B", "name": "前端修復", "description": "Portal 頁重構 + i18n 接入", "independence": "high" }
+          ],
+          "decomposition_strategy": "single_sop_fa_labeled",
+          "child_sops": []
+        }
+      }
+    }
+  }
+}

@@ -1,4 +1,5 @@
 import { createHmac } from 'crypto'
+import { lookup } from 'dns/promises'
 import { supabaseAdmin } from '../lib/supabase.js'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -42,6 +43,24 @@ export interface NotificationPayload {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const DEDUP_WINDOW_HOURS = 1
+const WEBHOOK_FETCH_TIMEOUT_MS = 10_000
+const WEBHOOK_RESPONSE_MAX_BYTES = 1024
+
+const VALID_EVENTS = ['quota_warning', 'quota_exhausted', 'spend_warning', 'spend_limit_reached'] as const
+
+function isPrivateIP(ip: string): boolean {
+  const parts = ip.split('.').map(Number)
+  if (parts.length === 4) {
+    if (parts[0] === 127) return true
+    if (parts[0] === 10) return true
+    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true
+    if (parts[0] === 192 && parts[1] === 168) return true
+    if (parts[0] === 169 && parts[1] === 254) return true
+    if (parts[0] === 0) return true
+  }
+  if (ip === '::1' || ip === '::' || ip.startsWith('fc') || ip.startsWith('fd') || ip.startsWith('fe80')) return true
+  return false
+}
 
 // ─── WebhookService ───────────────────────────────────────────────────────────
 
@@ -50,6 +69,17 @@ export class WebhookService {
    * 取得用戶的 webhook 設定（每用戶一組）
    */
   async getConfig(userId: string): Promise<WebhookConfig | null> {
+    const { data, error } = await supabaseAdmin
+      .from('webhook_configs')
+      .select('id, user_id, url, events, is_active, created_at')
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    if (error || !data) return null
+    return { ...data, secret: null } as WebhookConfig
+  }
+
+  private async _getConfigWithSecret(userId: string): Promise<WebhookConfig | null> {
     const { data, error } = await supabaseAdmin
       .from('webhook_configs')
       .select('*')
@@ -70,13 +100,28 @@ export class WebhookService {
     events?: string[]
   ): Promise<WebhookConfig> {
     // 驗證 URL 格式
+    let parsed: URL
     try {
-      const parsed = new URL(url)
+      parsed = new URL(url)
       if (!['http:', 'https:'].includes(parsed.protocol)) {
         throw new Error('Invalid webhook URL')
       }
     } catch {
       throw new Error('Invalid webhook URL')
+    }
+
+    // SSRF 防護
+    await this._validateUrlSafety(parsed)
+
+    // events 白名單驗證
+    if (events) {
+      if (events.length === 0) {
+        throw new Error('events must not be empty')
+      }
+      const invalid = events.filter(e => !(VALID_EVENTS as readonly string[]).includes(e))
+      if (invalid.length > 0) {
+        throw new Error(`Invalid event types: ${invalid.join(', ')}`)
+      }
     }
 
     const { data, error } = await supabaseAdmin
@@ -98,7 +143,28 @@ export class WebhookService {
       throw new Error(`Failed to upsert webhook config: ${error?.message ?? 'Unknown'}`)
     }
 
-    return data as WebhookConfig
+    const { secret: _secret, ...safeData } = data as WebhookConfig
+    return { ...safeData, secret: null } as WebhookConfig
+  }
+
+  /**
+   * SSRF 防護：拒絕私有 IP 和 localhost
+   * @internal 暴露給測試使用
+   */
+  async _validateUrlSafety(parsed: URL): Promise<void> {
+    const hostname = parsed.hostname.toLowerCase()
+    if (hostname === 'localhost' || hostname.endsWith('.local') || hostname.endsWith('.internal')) {
+      throw new Error('Invalid webhook URL: private hostnames are not allowed')
+    }
+    try {
+      const { address } = await lookup(hostname)
+      if (isPrivateIP(address)) {
+        throw new Error('Invalid webhook URL: private IP addresses are not allowed')
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('private')) throw err
+      throw new Error('Invalid webhook URL: hostname could not be resolved')
+    }
   }
 
   /**
@@ -143,7 +209,7 @@ export class WebhookService {
     event: string,
     payload: Record<string, unknown>
   ): Promise<WebhookLog | null> {
-    const config = await this.getConfig(userId)
+    const config = await this._getConfigWithSecret(userId)
     if (!config || !config.is_active) return null
     if (!config.events.includes(event)) return null
 
@@ -163,9 +229,15 @@ export class WebhookService {
     let responseBody: string | null = null
 
     try {
-      const resp = await fetch(config.url, { method: 'POST', headers, body })
+      const resp = await fetch(config.url, {
+        method: 'POST',
+        headers,
+        body,
+        signal: AbortSignal.timeout(WEBHOOK_FETCH_TIMEOUT_MS),
+      })
       statusCode = resp.status
-      responseBody = await resp.text()
+      const text = await resp.text()
+      responseBody = text.slice(0, WEBHOOK_RESPONSE_MAX_BYTES)
     } catch (err) {
       responseBody = err instanceof Error ? err.message : 'Unknown error'
     }
