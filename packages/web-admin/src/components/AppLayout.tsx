@@ -13,9 +13,11 @@ const navItems = [
   { href: '/admin/analytics', label: 'Analytics' },
   { href: '/admin/logs', label: 'Usage Logs' },
   { href: '/admin/topup-logs', label: 'Topup Logs' },
+  { href: '/admin/webhooks', label: 'Webhooks' },
   { href: '/admin/settings/rates', label: 'Settings: Rates' },
   { href: '/admin/settings/models', label: 'Settings: Models' },
   { href: '/admin/settings/routes', label: 'Settings: Routes' },
+  { href: '/admin/settings/webhooks', label: 'Settings: Webhooks' },
 ]
 
 export default function AppLayout({ children }: AppLayoutProps) {

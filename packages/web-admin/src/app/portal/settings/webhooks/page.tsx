@@ -299,7 +299,7 @@ export default function WebhookSettingsPage() {
                           ? `配額告警 ${log.payload.threshold}%`
                           : log.event}
                       </span>
-                      {(log.payload as Record<string, unknown>)?.is_test && (
+                      {Boolean((log.payload as Record<string, unknown>)?.is_test) && (
                         <span className="inline-flex items-center rounded-full bg-blue-100 text-blue-700 px-2 py-0.5 text-xs font-medium">
                           測試
                         </span>

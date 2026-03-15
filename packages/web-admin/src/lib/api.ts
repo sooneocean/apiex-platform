@@ -492,6 +492,91 @@ export interface RouteToggleResponse {
   warning?: "last_active_route";
 }
 
+// ─── Webhook Types ────────────────────────────────────────────────────────────
+
+export type NotificationEventType =
+  | 'quota_warning'
+  | 'quota_exhausted'
+  | 'spend_warning'
+  | 'spend_limit_reached'
+
+export const NOTIFICATION_EVENTS: { value: NotificationEventType; label: string }[] = [
+  { value: 'quota_warning', label: '配額警告（< 20%）' },
+  { value: 'quota_exhausted', label: '配額耗盡（= 0）' },
+  { value: 'spend_warning', label: '花費警告（> 80%）' },
+  { value: 'spend_limit_reached', label: '花費達限（>= 100%）' },
+]
+
+export interface WebhookConfig {
+  id: string
+  user_id: string
+  url: string
+  secret?: string | null
+  events: NotificationEventType[]
+  is_active: boolean
+  created_at: string
+}
+
+export interface WebhookLog {
+  id: string
+  webhook_config_id: string
+  event: string
+  payload: {
+    event_type: string
+    key_id: string
+    key_prefix: string
+    current_value: number
+    threshold: number
+    timestamp: string
+    is_test?: boolean
+  }
+  status_code: number | null
+  response_body: string | null
+  created_at: string
+}
+
+export interface WebhookConfigResponse {
+  data: WebhookConfig | null
+}
+
+export interface WebhookLogsResponse {
+  data: WebhookLog[]
+}
+
+export interface AdminWebhooksResponse {
+  data: WebhookConfig[]
+  pagination: Pagination
+}
+
+// ─── Webhook API Factories ────────────────────────────────────────────────────
+
+export function makeWebhooksApi(token: string) {
+  return {
+    get: () =>
+      apiGet<WebhookConfigResponse>('/webhooks', token),
+    upsert: (data: { url: string; secret?: string; events?: string[] }) =>
+      apiPost<WebhookConfigResponse>('/webhooks', data, token),
+    remove: (id: string) =>
+      apiDelete<{ data: { id: string; deleted: boolean } }>(`/webhooks/${id}`, token),
+    logs: (id: string, limit = 20) =>
+      apiGet<WebhookLogsResponse>(`/webhooks/${id}/logs?limit=${limit}`, token),
+    test: () =>
+      apiPost<{ data: WebhookLog }>('/webhooks/test', {}, token),
+  }
+}
+
+export function makeAdminWebhooksApi(token: string) {
+  return {
+    list: (query: { page?: number; limit?: number } = {}) => {
+      const params = new URLSearchParams()
+      if (query.page !== undefined) params.set('page', String(query.page))
+      if (query.limit !== undefined) params.set('limit', String(query.limit))
+      const qs = params.toString()
+      return apiGet<AdminWebhooksResponse>(`/admin/webhooks${qs ? `?${qs}` : ''}`, token)
+    },
+  }
+}
+
 export function makeRoutesApi(getToken: () => Promise<string>) {
   return {
     list: async (signal?: AbortSignal) => {
