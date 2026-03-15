@@ -513,5 +513,192 @@ export function adminRoutes() {
     }
   })
 
+  // ---------------------------------------------------------------------------
+  // Admin Routes (route_config) endpoints — FA-E
+  // Alias of /admin/models with additional toggle endpoint
+  // ---------------------------------------------------------------------------
+
+  /**
+   * GET /admin/routes — List all route_config records (including inactive)
+   */
+  router.get('/routes', async (c) => {
+    try {
+      const routes = await routeConfigSvc.listAll()
+      return c.json({ data: routes })
+    } catch (err) {
+      console.error('admin routes list error:', err)
+      return Errors.internalError()
+    }
+  })
+
+  /**
+   * POST /admin/routes — Create a new route_config record
+   */
+  router.post('/routes', async (c) => {
+    const body = await c.req.json<{
+      tag?: string
+      upstream_provider?: string
+      upstream_model?: string
+      upstream_base_url?: string
+      is_active?: boolean
+    }>()
+
+    if (!body.tag || typeof body.tag !== 'string' || body.tag.trim() === '') {
+      return Errors.invalidParam('tag is required')
+    }
+    if (!body.upstream_provider || typeof body.upstream_provider !== 'string' || body.upstream_provider.trim() === '') {
+      return Errors.invalidParam('upstream_provider is required')
+    }
+    if (!body.upstream_model || typeof body.upstream_model !== 'string' || body.upstream_model.trim() === '') {
+      return Errors.invalidParam('upstream_model is required')
+    }
+    if (!body.upstream_base_url || typeof body.upstream_base_url !== 'string' || body.upstream_base_url.trim() === '') {
+      return Errors.invalidParam('upstream_base_url is required')
+    }
+
+    try {
+      const route = await routeConfigSvc.create({
+        tag: body.tag.trim(),
+        upstream_provider: body.upstream_provider.trim(),
+        upstream_model: body.upstream_model.trim(),
+        upstream_base_url: body.upstream_base_url.trim(),
+        is_active: body.is_active,
+      })
+      return c.json({ data: route }, 201)
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message === 'conflict') {
+        return new Response(
+          JSON.stringify({
+            error: {
+              message: `An active route with tag '${body.tag}' already exists.`,
+              type: 'invalid_request_error',
+              code: 'conflict',
+            },
+          }),
+          { status: 409, headers: { 'Content-Type': 'application/json' } }
+        )
+      }
+      console.error('admin create route error:', err)
+      return Errors.internalError()
+    }
+  })
+
+  /**
+   * PATCH /admin/routes/:id — Partial update of an existing route_config record
+   */
+  router.patch('/routes/:id', async (c) => {
+    const id = c.req.param('id')
+    const body = await c.req.json<{
+      tag?: string
+      upstream_provider?: string
+      upstream_model?: string
+      upstream_base_url?: string
+      is_active?: boolean
+    }>()
+
+    const hasUpdate = [
+      body.tag,
+      body.upstream_provider,
+      body.upstream_model,
+      body.upstream_base_url,
+      body.is_active,
+    ].some((v) => v !== undefined)
+
+    if (!hasUpdate) {
+      return Errors.invalidParam('At least one field must be provided for update')
+    }
+
+    if (body.tag !== undefined && (typeof body.tag !== 'string' || body.tag.trim() === '')) {
+      return Errors.invalidParam('tag must be a non-empty string')
+    }
+    if (body.upstream_provider !== undefined && (typeof body.upstream_provider !== 'string' || body.upstream_provider.trim() === '')) {
+      return Errors.invalidParam('upstream_provider must be a non-empty string')
+    }
+    if (body.upstream_model !== undefined && (typeof body.upstream_model !== 'string' || body.upstream_model.trim() === '')) {
+      return Errors.invalidParam('upstream_model must be a non-empty string')
+    }
+    if (body.upstream_base_url !== undefined && (typeof body.upstream_base_url !== 'string' || body.upstream_base_url.trim() === '')) {
+      return Errors.invalidParam('upstream_base_url must be a non-empty string')
+    }
+
+    try {
+      const route = await routeConfigSvc.update(id, {
+        ...(body.tag !== undefined ? { tag: body.tag.trim() } : {}),
+        ...(body.upstream_provider !== undefined ? { upstream_provider: body.upstream_provider.trim() } : {}),
+        ...(body.upstream_model !== undefined ? { upstream_model: body.upstream_model.trim() } : {}),
+        ...(body.upstream_base_url !== undefined ? { upstream_base_url: body.upstream_base_url.trim() } : {}),
+        ...(body.is_active !== undefined ? { is_active: body.is_active } : {}),
+      })
+      return c.json({ data: route })
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message === 'not_found') {
+        return Errors.notFound()
+      }
+      if (err instanceof Error && err.message === 'conflict') {
+        return new Response(
+          JSON.stringify({
+            error: {
+              message: `An active route with the same tag already exists.`,
+              type: 'invalid_request_error',
+              code: 'conflict',
+            },
+          }),
+          { status: 409, headers: { 'Content-Type': 'application/json' } }
+        )
+      }
+      console.error('admin update route error:', err)
+      return Errors.internalError()
+    }
+  })
+
+  /**
+   * PATCH /admin/routes/:id/toggle — Toggle is_active for a route_config record.
+   * If toggling to inactive and this is the last active route for the same tag,
+   * the operation is still allowed but response includes warning: "last_active_route".
+   */
+  router.patch('/routes/:id/toggle', async (c) => {
+    const id = c.req.param('id')
+
+    // Fetch current record
+    const { data: current, error: fetchError } = await supabaseAdmin
+      .from('route_config')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (fetchError || !current) {
+      return Errors.notFound()
+    }
+
+    const nextActive = !current.is_active
+    let warning: string | undefined
+
+    // If disabling, check whether it's the last active route for this tag
+    if (current.is_active && nextActive === false) {
+      const { data: activeRoutes } = await supabaseAdmin
+        .from('route_config')
+        .select('id')
+        .eq('tag', current.tag)
+        .eq('is_active', true)
+
+      if (activeRoutes && activeRoutes.length <= 1) {
+        warning = 'last_active_route'
+      }
+    }
+
+    try {
+      const updated = await routeConfigSvc.update(id, { is_active: nextActive })
+      const responseBody: { data: typeof updated; warning?: string } = { data: updated }
+      if (warning) responseBody.warning = warning
+      return c.json(responseBody)
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message === 'not_found') {
+        return Errors.notFound()
+      }
+      console.error('admin toggle route error:', err)
+      return Errors.internalError()
+    }
+  })
+
   return router
 }
