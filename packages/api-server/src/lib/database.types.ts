@@ -121,6 +121,7 @@ export interface ModelRate {
   input_rate_per_1k: number
   output_rate_per_1k: number
   effective_from: string
+  created_by: string | null  // 建立此費率的 Admin user ID（REFERENCES auth.users.id）
   created_at: string
 }
 
@@ -129,6 +130,7 @@ export interface ModelRateInsert {
   input_rate_per_1k: number
   output_rate_per_1k: number
   effective_from?: string
+  created_by?: string  // Admin user ID（用於追蹤費率建立者，由 RatesService 插入時填入）
 }
 
 export type ModelRateUpdate = Partial<ModelRateInsert>
