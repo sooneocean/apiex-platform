@@ -11,6 +11,7 @@ export interface ApiKeyRecord {
   spend_limit_usd: number
   spent_usd: number
   created_at: string
+  expires_at: string | null
 }
 
 export interface CreateKeyResult {
@@ -23,6 +24,7 @@ export interface CreateKeyResult {
   spend_limit_usd: number
   spent_usd: number
   created_at: string
+  expires_at: string | null
 }
 
 export interface ReserveQuotaResult {
@@ -38,7 +40,7 @@ export class KeyService {
    * quota_tokens 繼承 user_quotas.default_quota_tokens，無記錄則為 -1
    * spend_limit_usd: 可選，預設 -1（無限制）
    */
-  async createKey(userId: string, name: string, spendLimitUsd = -1): Promise<CreateKeyResult> {
+  async createKey(userId: string, name: string, spendLimitUsd = -1, expiresAt: string | null = null): Promise<CreateKeyResult> {
     // 1. 查詢用戶預設 quota
     const { data: quotaRecord } = await supabaseAdmin
       .from('user_quotas')
@@ -74,6 +76,7 @@ export class KeyService {
         quota_tokens: quotaTokens,
         spend_limit_usd: spendLimitUsd,
         spent_usd: 0,
+        expires_at: expiresAt,
       })
       .select()
       .single()
@@ -92,6 +95,7 @@ export class KeyService {
       spend_limit_usd: data.spend_limit_usd ?? -1,
       spent_usd: data.spent_usd ?? 0,
       created_at: data.created_at,
+      expires_at: data.expires_at ?? null,
     }
   }
 
@@ -242,7 +246,7 @@ export class KeyService {
   async listKeys(userId: string): Promise<ApiKeyRecord[]> {
     const { data, error } = await supabaseAdmin
       .from('api_keys')
-      .select('id, user_id, name, prefix, status, quota_tokens, spend_limit_usd, spent_usd, created_at')
+      .select('id, user_id, name, prefix, status, quota_tokens, spend_limit_usd, spent_usd, created_at, expires_at')
       .eq('user_id', userId)
 
     if (error || !data) {

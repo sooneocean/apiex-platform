@@ -111,7 +111,7 @@ describe('Keys Route — T11', () => {
       expect(body.data.spend_limit_usd).toBe(-1)
       expect(body.data.spent_usd).toBe(0)
       expect(body.warning).toBeDefined()
-      expect(mockCreateKey).toHaveBeenCalledWith('user-uuid-test', 'my-new-key', -1)
+      expect(mockCreateKey).toHaveBeenCalledWith('user-uuid-test', 'my-new-key', -1, null)
     })
 
     it('should_createKey_withSpendLimit', async () => {
@@ -136,7 +136,72 @@ describe('Keys Route — T11', () => {
       expect(res.status).toBe(201)
       const body = await res.json()
       expect(body.data.spend_limit_usd).toBe(5000)
-      expect(mockCreateKey).toHaveBeenCalledWith('user-uuid-test', 'limited-key', 5000)
+      expect(mockCreateKey).toHaveBeenCalledWith('user-uuid-test', 'limited-key', 5000, null)
+    })
+
+    it('should_createKey_withExpiresAt', async () => {
+      const expiresAt = '2030-12-31T23:59:59Z'
+      mockCreateKey.mockResolvedValue({
+        id: 'key-expiry',
+        key: 'apx-sk-aBcDeFgHiJkLmNoPqRsTuVwXyZ012345680',
+        prefix: 'apx-sk-aB',
+        name: 'expiry-key',
+        status: 'active',
+        quota_tokens: -1,
+        spend_limit_usd: -1,
+        spent_usd: 0,
+        created_at: '2026-03-14T00:00:00Z',
+        expires_at: expiresAt,
+      })
+
+      const res = await app.request('/keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'expiry-key', expires_at: expiresAt }),
+      })
+
+      expect(res.status).toBe(201)
+      const body = await res.json()
+      expect(body.data.expires_at).toBe(expiresAt)
+      expect(mockCreateKey).toHaveBeenCalledWith('user-uuid-test', 'expiry-key', -1, expiresAt)
+    })
+
+    it('should_createKey_withNullExpiresAt_backward_compat', async () => {
+      mockCreateKey.mockResolvedValue({
+        id: 'key-noexpiry',
+        key: 'apx-sk-aBcDeFgHiJkLmNoPqRsTuVwXyZ012345681',
+        prefix: 'apx-sk-aB',
+        name: 'no-expiry-key',
+        status: 'active',
+        quota_tokens: -1,
+        spend_limit_usd: -1,
+        spent_usd: 0,
+        created_at: '2026-03-14T00:00:00Z',
+        expires_at: null,
+      })
+
+      const res = await app.request('/keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'no-expiry-key' }),
+      })
+
+      expect(res.status).toBe(201)
+      const body = await res.json()
+      expect(body.data.expires_at).toBeNull()
+      expect(mockCreateKey).toHaveBeenCalledWith('user-uuid-test', 'no-expiry-key', -1, null)
+    })
+
+    it('should_return400_whenExpiresAtIsInvalid', async () => {
+      const res = await app.request('/keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'bad-expiry', expires_at: 'not-a-date' }),
+      })
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.error.code).toBe('invalid_parameter')
     })
 
     it('should_return400_whenInvalidSpendLimit', async () => {

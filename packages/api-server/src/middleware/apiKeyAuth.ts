@@ -50,6 +50,12 @@ export const apiKeyAuth = createMiddleware(async (c, next) => {
     return Errors.invalidApiKey()
   }
 
+  // Check key expiration
+  const expiresAt = data.expires_at as string | null
+  if (expiresAt && new Date(expiresAt) < new Date()) {
+    return Errors.expiredApiKey()
+  }
+
   // Attach key info to context for downstream handlers
   c.set('apiKey', data)
   c.set('apiKeyId', data.id as string)

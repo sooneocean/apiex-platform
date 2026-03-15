@@ -173,6 +173,90 @@ describe('Hono App — T03 骨架測試', () => {
     expect(body.userId).toBe('user-uuid-001')
   })
 
+  // --- DoD Case 7: should_return401_whenKeyExpired ---
+  it('expired API key should return 401 with expired_api_key code', async () => {
+    const { Hono } = await import('hono')
+    const { apiKeyAuth } = await import('../middleware/apiKeyAuth.js')
+
+    const expiredKeyData = {
+      id: 'key-expired-001',
+      user_id: 'user-uuid-001',
+      key_hash: 'hashxxx',
+      status: 'active',
+      expires_at: '2020-01-01T00:00:00Z', // past date
+    }
+    mockSingle.mockResolvedValue({ data: expiredKeyData, error: null })
+
+    const testApp = new Hono()
+    testApp.use('/v1/*', apiKeyAuth)
+    testApp.get('/v1/test', (c) => c.json({ ok: true }))
+
+    const res = await testApp.request('/v1/test', {
+      headers: { Authorization: 'Bearer apx-sk-test-key-expired' },
+    })
+    expect(res.status).toBe(401)
+    const body = await res.json()
+    expect(body).toMatchObject({
+      error: {
+        type: 'authentication_error',
+        code: 'expired_api_key',
+      },
+    })
+  })
+
+  // --- DoD Case 8: should_passAuth_whenKeyNotYetExpired ---
+  it('non-expired API key with future expires_at should pass auth', async () => {
+    const { Hono } = await import('hono')
+    const { apiKeyAuth } = await import('../middleware/apiKeyAuth.js')
+
+    const futureDate = new Date(Date.now() + 86400 * 1000).toISOString() // +1 day
+    const validKeyData = {
+      id: 'key-future-001',
+      user_id: 'user-uuid-002',
+      key_hash: 'hashyyy',
+      status: 'active',
+      expires_at: futureDate,
+    }
+    mockSingle.mockResolvedValue({ data: validKeyData, error: null })
+
+    const testApp = new Hono()
+    testApp.use('/v1/*', apiKeyAuth)
+    testApp.get('/v1/test', (c) => c.json({ userId: c.get('userId') }))
+
+    const res = await testApp.request('/v1/test', {
+      headers: { Authorization: 'Bearer apx-sk-test-key-future' },
+    })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.userId).toBe('user-uuid-002')
+  })
+
+  // --- DoD Case 9: should_passAuth_whenExpiresAtIsNull ---
+  it('API key with null expires_at (no expiry) should pass auth', async () => {
+    const { Hono } = await import('hono')
+    const { apiKeyAuth } = await import('../middleware/apiKeyAuth.js')
+
+    const noExpiryKeyData = {
+      id: 'key-noexp-001',
+      user_id: 'user-uuid-003',
+      key_hash: 'hashzzz',
+      status: 'active',
+      expires_at: null,
+    }
+    mockSingle.mockResolvedValue({ data: noExpiryKeyData, error: null })
+
+    const testApp = new Hono()
+    testApp.use('/v1/*', apiKeyAuth)
+    testApp.get('/v1/test', (c) => c.json({ userId: c.get('userId') }))
+
+    const res = await testApp.request('/v1/test', {
+      headers: { Authorization: 'Bearer apx-sk-test-key-noexp' },
+    })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.userId).toBe('user-uuid-003')
+  })
+
   // --- Admin without JWT should return 401 ---
   it('admin endpoint without JWT should return 401', async () => {
     const res = await app.request('/admin/users')

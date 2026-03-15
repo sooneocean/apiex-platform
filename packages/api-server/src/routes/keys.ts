@@ -54,7 +54,7 @@ export function keysRoutes() {
       return Errors.rateLimitExceeded()
     }
 
-    const body = await c.req.json<{ name?: string; spend_limit_usd?: number }>().catch(() => ({}))
+    const body = await c.req.json<{ name?: string; spend_limit_usd?: number; expires_at?: string | null }>().catch(() => ({}))
     const name = body.name ?? ''
 
     // Validate spend_limit_usd if provided
@@ -62,8 +62,17 @@ export function keysRoutes() {
       return Errors.invalidParam('spend_limit_usd must be an integer >= -1 (-1 means unlimited).')
     }
 
+    // Validate expires_at if provided
+    if (body.expires_at !== undefined && body.expires_at !== null) {
+      const parsed = new Date(body.expires_at)
+      if (Number.isNaN(parsed.getTime())) {
+        return Errors.invalidParam('expires_at must be a valid ISO 8601 date string or null.')
+      }
+    }
+
     const spendLimitUsd = body.spend_limit_usd ?? -1
-    const result = await keyService.createKey(userId, name, spendLimitUsd)
+    const expiresAt = body.expires_at ?? null
+    const result = await keyService.createKey(userId, name, spendLimitUsd, expiresAt)
 
     // Record timestamp for rate limiting
     createKeyTimestamps.set(userId, Date.now())
@@ -80,6 +89,7 @@ export function keysRoutes() {
           spend_limit_usd: result.spend_limit_usd,
           spent_usd: result.spent_usd,
           created_at: result.created_at,
+          expires_at: result.expires_at,
         },
         warning: 'This key will not be shown again. Store it securely.',
       },
