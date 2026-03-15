@@ -52,3 +52,13 @@
 
 - 手寫 debounce (useRef + setTimeout) 必須配合 useEffect cleanup，否則元件 unmount 後 setState 導致 memory leak — 建議用 `useEffect(() => () => clearTimeout(ref.current), [])` 確保清理
   — dashboard-ux-polish (2026-03)
+
+## Rate Limiting / Counter Key 一致性
+
+- 當 `check()` 和 `record()` 使用不同的 counterKey 邏輯時（例如 check 在無 model override 時用 `keyId`，record 永遠用 `keyId:model`），會導致 token correction 寫到錯誤的 key。建議用 `lastCounterKey` cache 或讓 `check()` 回傳 counterKey 供 `record()` 使用。
+  — rate-limit-v2 (2026-03)
+
+## Frontend i18n 規範
+
+- 新增 Admin CRUD 頁面時必須使用 `useTranslations()`，不可 hardcode 字串。容易在功能開發完成後遺漏 i18n 整合。
+  — rate-limit-v2 (2026-03)

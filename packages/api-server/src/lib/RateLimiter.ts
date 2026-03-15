@@ -155,6 +155,7 @@ export class RateLimiter {
   private backend: CounterBackend
   private configCache = new Map<string, { config: RateLimitConfig; cachedAt: number }>()
   private modelOverrideCache: Map<string, { config: { rpm: number; tpm: number } | null; cachedAt: number }> = new Map()
+  private lastCounterKey = new Map<string, string>() // keyId:model → counterKey used by check()
   private db: typeof supabaseAdmin
 
   constructor(backend?: CounterBackend, db?: typeof supabaseAdmin) {
@@ -247,6 +248,10 @@ export class RateLimiter {
       console.warn('[RateLimiter] Backend error in recordRequest, skipping record:', err)
     }
 
+    // Store counterKey so record() can use the same key
+    const lookupKey = model ? `${keyId}:${model}` : keyId
+    this.lastCounterKey.set(lookupKey, counterKey)
+
     return {
       allowed: true,
       limits,
@@ -258,8 +263,9 @@ export class RateLimiter {
   }
 
   record(keyId: string, actualTokens: number, model?: string): void {
-    const counterKey = model ? `${keyId}:${model}` : keyId
-    // Fire-and-forget; ignore errors silently
+    // Use the same counterKey that check() used for this keyId+model combination
+    const lookupKey = model ? `${keyId}:${model}` : keyId
+    const counterKey = this.lastCounterKey.get(lookupKey) ?? lookupKey
     this.backend.correctTokens(counterKey, 0, actualTokens).catch(err => {
       console.warn('[RateLimiter] Backend error in correctTokens:', err)
     })

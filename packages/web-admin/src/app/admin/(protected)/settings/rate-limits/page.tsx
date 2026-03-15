@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { useTranslations } from 'next-intl'
 import { supabase } from '@/lib/supabase'
 import {
   makeRateLimitsApi,
@@ -42,6 +43,9 @@ function Toast({ type, message, onClose }: ToastProps) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function RateLimitsPage() {
+  const t = useTranslations('rateLimits')
+  const tc = useTranslations('common')
+
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
@@ -85,11 +89,11 @@ export default function RateLimitsPage() {
       setOverrides(overridesResp.data)
     } catch (err) {
       console.error('Failed to load rate limits:', err)
-      showToast('error', '載入失敗')
+      showToast('error', t('loadFailed'))
     } finally {
       setLoading(false)
     }
-  }, [getToken])
+  }, [getToken, t])
 
   useEffect(() => {
     loadData()
@@ -99,17 +103,17 @@ export default function RateLimitsPage() {
 
   const handleCreateTier = async () => {
     if (!newTier.tier.trim()) {
-      showToast('error', 'Tier 名稱為必填')
+      showToast('error', t('tierNameRequired'))
       return
     }
     const rpm = parseInt(newTier.rpm, 10)
     const tpm = parseInt(newTier.tpm, 10)
     if (isNaN(rpm) || rpm < -1) {
-      showToast('error', 'RPM 必須為整數且 >= -1（-1 表示無限制）')
+      showToast('error', t('rpmInvalid'))
       return
     }
     if (isNaN(tpm) || tpm < -1) {
-      showToast('error', 'TPM 必須為整數且 >= -1（-1 表示無限制）')
+      showToast('error', t('tpmInvalid'))
       return
     }
 
@@ -120,10 +124,10 @@ export default function RateLimitsPage() {
       await api.createTier({ tier: newTier.tier.trim(), rpm, tpm })
       setNewTier({ tier: '', rpm: '', tpm: '' })
       setShowTierForm(false)
-      showToast('success', 'Tier 已新增')
+      showToast('success', t('tierAdded'))
       await loadData()
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '新增失敗'
+      const msg = err instanceof Error ? err.message : t('addFailed')
       showToast('error', msg)
     } finally {
       setSavingTier(false)
@@ -139,11 +143,11 @@ export default function RateLimitsPage() {
     const rpm = parseInt(editTierValues.rpm, 10)
     const tpm = parseInt(editTierValues.tpm, 10)
     if (isNaN(rpm) || rpm < -1) {
-      showToast('error', 'RPM 必須為整數且 >= -1')
+      showToast('error', t('rpmInvalidShort'))
       return
     }
     if (isNaN(tpm) || tpm < -1) {
-      showToast('error', 'TPM 必須為整數且 >= -1')
+      showToast('error', t('tpmInvalidShort'))
       return
     }
 
@@ -153,10 +157,10 @@ export default function RateLimitsPage() {
       const api = makeRateLimitsApi(token)
       await api.updateTier(tierName, { rpm, tpm })
       setEditingTier(null)
-      showToast('success', 'Tier 已更新')
+      showToast('success', t('tierUpdated'))
       await loadData()
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '更新失敗'
+      const msg = err instanceof Error ? err.message : t('updateFailed')
       showToast('error', msg)
     } finally {
       setSavingTier(false)
@@ -164,21 +168,21 @@ export default function RateLimitsPage() {
   }
 
   const handleDeleteTier = async (tierName: string) => {
-    if (!window.confirm(`確定要刪除 Tier「${tierName}」？此操作無法復原。`)) return
+    if (!window.confirm(t('confirmDeleteTier', { tier: tierName }))) return
 
     setDeletingTier(tierName)
     try {
       const token = await getToken()
       const api = makeRateLimitsApi(token)
       await api.deleteTier(tierName)
-      showToast('success', `Tier「${tierName}」已刪除`)
+      showToast('success', t('tierDeleted', { tier: tierName }))
       await loadData()
     } catch (err) {
       const errObj = err as Error & { status?: number }
       if (errObj.status === 409) {
-        showToast('error', errObj.message || `此 tier 仍有 key 使用中，無法刪除`)
+        showToast('error', errObj.message || t('tierInUse'))
       } else {
-        showToast('error', errObj.message || '刪除失敗')
+        showToast('error', errObj.message || t('deleteFailed'))
       }
     } finally {
       setDeletingTier(null)
@@ -189,21 +193,21 @@ export default function RateLimitsPage() {
 
   const handleCreateOverride = async () => {
     if (!newOverride.tier.trim()) {
-      showToast('error', 'Tier 為必填')
+      showToast('error', t('tierRequired'))
       return
     }
     if (!newOverride.model_tag.trim()) {
-      showToast('error', 'Model Tag 為必填')
+      showToast('error', t('modelTagRequired'))
       return
     }
     const rpm = parseInt(newOverride.rpm, 10)
     const tpm = parseInt(newOverride.tpm, 10)
     if (isNaN(rpm) || rpm < -1) {
-      showToast('error', 'RPM 必須為整數且 >= -1（-1 表示無限制）')
+      showToast('error', t('rpmInvalid'))
       return
     }
     if (isNaN(tpm) || tpm < -1) {
-      showToast('error', 'TPM 必須為整數且 >= -1（-1 表示無限制）')
+      showToast('error', t('tpmInvalid'))
       return
     }
 
@@ -219,14 +223,14 @@ export default function RateLimitsPage() {
       })
       setNewOverride({ tier: '', model_tag: '', rpm: '', tpm: '' })
       setShowOverrideForm(false)
-      showToast('success', 'Override 已新增')
+      showToast('success', t('overrideAdded'))
       await loadData()
     } catch (err) {
       const errObj = err as Error & { status?: number }
       if (errObj.status === 409) {
-        showToast('error', '此 tier + model 組合已存在')
+        showToast('error', t('overrideExists'))
       } else {
-        showToast('error', errObj.message || '新增失敗')
+        showToast('error', errObj.message || t('addFailed'))
       }
     } finally {
       setSavingOverride(false)
@@ -242,11 +246,11 @@ export default function RateLimitsPage() {
     const rpm = parseInt(editOverrideValues.rpm, 10)
     const tpm = parseInt(editOverrideValues.tpm, 10)
     if (isNaN(rpm) || rpm < -1) {
-      showToast('error', 'RPM 必須為整數且 >= -1')
+      showToast('error', t('rpmInvalidShort'))
       return
     }
     if (isNaN(tpm) || tpm < -1) {
-      showToast('error', 'TPM 必須為整數且 >= -1')
+      showToast('error', t('tpmInvalidShort'))
       return
     }
 
@@ -256,10 +260,10 @@ export default function RateLimitsPage() {
       const api = makeRateLimitsApi(token)
       await api.updateOverride(id, { rpm, tpm })
       setEditingOverride(null)
-      showToast('success', 'Override 已更新')
+      showToast('success', t('overrideUpdated'))
       await loadData()
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '更新失敗'
+      const msg = err instanceof Error ? err.message : t('updateFailed')
       showToast('error', msg)
     } finally {
       setSavingOverride(false)
@@ -267,17 +271,17 @@ export default function RateLimitsPage() {
   }
 
   const handleDeleteOverride = async (id: string) => {
-    if (!window.confirm('確定要刪除此 Override？此操作無法復原。')) return
+    if (!window.confirm(t('confirmDeleteOverride'))) return
 
     setDeletingOverride(id)
     try {
       const token = await getToken()
       const api = makeRateLimitsApi(token)
       await api.deleteOverride(id)
-      showToast('success', 'Override 已刪除')
+      showToast('success', t('overrideDeleted'))
       await loadData()
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '刪除失敗'
+      const msg = err instanceof Error ? err.message : t('deleteFailed')
       showToast('error', msg)
     } finally {
       setDeletingOverride(null)
@@ -303,12 +307,12 @@ export default function RateLimitsPage() {
 
   return (
     <div className="p-8 max-w-4xl space-y-8">
-      <h1 className="text-xl font-semibold text-gray-900">Rate Limits 設定</h1>
+      <h1 className="text-xl font-semibold text-gray-900">{t('title')}</h1>
 
       {/* ── Tiers ── */}
       <section>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-medium text-gray-900">Tier 管理</h2>
+          <h2 className="text-base font-medium text-gray-900">{t('tierManagement')}</h2>
           <button
             onClick={() => {
               setShowTierForm((v) => !v)
@@ -316,42 +320,42 @@ export default function RateLimitsPage() {
             }}
             className="px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors"
           >
-            新增 Tier
+            {t('addTier')}
           </button>
         </div>
 
         {/* New Tier Form */}
         {showTierForm && (
           <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4 space-y-3">
-            <p className="text-sm font-medium text-gray-700">新增 Tier</p>
+            <p className="text-sm font-medium text-gray-700">{t('newTier')}</p>
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Tier 名稱 <span className="text-red-500">*</span></label>
+                <label className="block text-xs text-gray-500 mb-1">{t('tierName')} <span className="text-red-500">*</span></label>
                 <input
                   type="text"
                   value={newTier.tier}
                   onChange={(e) => setNewTier((v) => ({ ...v, tier: e.target.value }))}
-                  placeholder="例如：enterprise"
+                  placeholder={t('tierNamePlaceholder')}
                   className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">RPM（-1 = 無限制）<span className="text-red-500">*</span></label>
+                <label className="block text-xs text-gray-500 mb-1">{t('rpmLabel')}<span className="text-red-500">*</span></label>
                 <input
                   type="number"
                   value={newTier.rpm}
                   onChange={(e) => setNewTier((v) => ({ ...v, rpm: e.target.value }))}
-                  placeholder="60"
+                  placeholder={t('rpmPlaceholder')}
                   className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">TPM（-1 = 無限制）<span className="text-red-500">*</span></label>
+                <label className="block text-xs text-gray-500 mb-1">{t('tpmLabel')}<span className="text-red-500">*</span></label>
                 <input
                   type="number"
                   value={newTier.tpm}
                   onChange={(e) => setNewTier((v) => ({ ...v, tpm: e.target.value }))}
-                  placeholder="500000"
+                  placeholder={t('tpmPlaceholder')}
                   className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
@@ -362,13 +366,13 @@ export default function RateLimitsPage() {
                 disabled={savingTier}
                 className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
               >
-                {savingTier ? '儲存中...' : '儲存'}
+                {savingTier ? tc('saving') : tc('save')}
               </button>
               <button
                 onClick={() => setShowTierForm(false)}
                 className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-200 transition-colors"
               >
-                取消
+                {tc('cancel')}
               </button>
             </div>
           </div>
@@ -377,7 +381,7 @@ export default function RateLimitsPage() {
         {/* Tiers Table */}
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
           {tiers.length === 0 ? (
-            <p className="p-4 text-sm text-gray-500">尚無 Tier 設定，請點擊「新增 Tier」開始設定</p>
+            <p className="p-4 text-sm text-gray-500">{t('noTiers')}</p>
           ) : (
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
@@ -385,8 +389,8 @@ export default function RateLimitsPage() {
                   <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Tier</th>
                   <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">RPM</th>
                   <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">TPM</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">建立時間</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">操作</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">{t('createdAt')}</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">{t('operations')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -403,7 +407,7 @@ export default function RateLimitsPage() {
                         />
                       ) : (
                         <span className={tier.rpm === -1 ? 'text-gray-400 italic' : ''}>
-                          {tier.rpm === -1 ? '無限制' : tier.rpm.toLocaleString()}
+                          {tier.rpm === -1 ? tc('unlimited') : tier.rpm.toLocaleString()}
                         </span>
                       )}
                     </td>
@@ -417,7 +421,7 @@ export default function RateLimitsPage() {
                         />
                       ) : (
                         <span className={tier.tpm === -1 ? 'text-gray-400 italic' : ''}>
-                          {tier.tpm === -1 ? '無限制' : tier.tpm.toLocaleString()}
+                          {tier.tpm === -1 ? tc('unlimited') : tier.tpm.toLocaleString()}
                         </span>
                       )}
                     </td>
@@ -432,13 +436,13 @@ export default function RateLimitsPage() {
                             disabled={savingTier}
                             className="px-3 py-1 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 disabled:opacity-50 transition-colors"
                           >
-                            {savingTier ? '...' : '儲存'}
+                            {savingTier ? '...' : tc('save')}
                           </button>
                           <button
                             onClick={() => setEditingTier(null)}
                             className="px-3 py-1 bg-gray-100 text-gray-700 text-xs font-medium rounded hover:bg-gray-200 transition-colors"
                           >
-                            取消
+                            {tc('cancel')}
                           </button>
                         </div>
                       ) : (
@@ -447,14 +451,14 @@ export default function RateLimitsPage() {
                             onClick={() => handleStartEditTier(tier)}
                             className="px-3 py-1 bg-gray-100 text-gray-700 text-xs font-medium rounded hover:bg-gray-200 transition-colors"
                           >
-                            編輯
+                            {tc('edit')}
                           </button>
                           <button
                             onClick={() => handleDeleteTier(tier.tier)}
                             disabled={deletingTier === tier.tier}
                             className="px-3 py-1 bg-red-50 text-red-600 text-xs font-medium rounded hover:bg-red-100 disabled:opacity-50 transition-colors"
                           >
-                            {deletingTier === tier.tier ? '...' : '刪除'}
+                            {deletingTier === tier.tier ? '...' : tc('delete')}
                           </button>
                         </div>
                       )}
@@ -470,7 +474,7 @@ export default function RateLimitsPage() {
       {/* ── Model Overrides ── */}
       <section>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-medium text-gray-900">Model Override 管理</h2>
+          <h2 className="text-base font-medium text-gray-900">{t('overrideManagement')}</h2>
           <button
             onClick={() => {
               setShowOverrideForm((v) => !v)
@@ -478,14 +482,14 @@ export default function RateLimitsPage() {
             }}
             className="px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors"
           >
-            新增 Override
+            {t('addOverride')}
           </button>
         </div>
 
         {/* New Override Form */}
         {showOverrideForm && (
           <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4 space-y-3">
-            <p className="text-sm font-medium text-gray-700">新增 Model Override</p>
+            <p className="text-sm font-medium text-gray-700">{t('newOverride')}</p>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Tier <span className="text-red-500">*</span></label>
@@ -494,24 +498,24 @@ export default function RateLimitsPage() {
                   onChange={(e) => setNewOverride((v) => ({ ...v, tier: e.target.value }))}
                   className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
                 >
-                  <option value="">選擇 Tier...</option>
-                  {tiers.map((t) => (
-                    <option key={t.tier} value={t.tier}>{t.tier}</option>
+                  <option value="">{t('selectTier')}</option>
+                  {tiers.map((t_tier) => (
+                    <option key={t_tier.tier} value={t_tier.tier}>{t_tier.tier}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Model Tag <span className="text-red-500">*</span></label>
+                <label className="block text-xs text-gray-500 mb-1">{t('modelTagLabel')} <span className="text-red-500">*</span></label>
                 <input
                   type="text"
                   value={newOverride.model_tag}
                   onChange={(e) => setNewOverride((v) => ({ ...v, model_tag: e.target.value }))}
-                  placeholder="例如：apex-smart"
+                  placeholder={t('modelTagPlaceholder')}
                   className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">RPM（-1 = 無限制）<span className="text-red-500">*</span></label>
+                <label className="block text-xs text-gray-500 mb-1">{t('rpmLabel')}<span className="text-red-500">*</span></label>
                 <input
                   type="number"
                   value={newOverride.rpm}
@@ -521,7 +525,7 @@ export default function RateLimitsPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">TPM（-1 = 無限制）<span className="text-red-500">*</span></label>
+                <label className="block text-xs text-gray-500 mb-1">{t('tpmLabel')}<span className="text-red-500">*</span></label>
                 <input
                   type="number"
                   value={newOverride.tpm}
@@ -537,13 +541,13 @@ export default function RateLimitsPage() {
                 disabled={savingOverride}
                 className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
               >
-                {savingOverride ? '儲存中...' : '儲存'}
+                {savingOverride ? tc('saving') : tc('save')}
               </button>
               <button
                 onClick={() => setShowOverrideForm(false)}
                 className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-200 transition-colors"
               >
-                取消
+                {tc('cancel')}
               </button>
             </div>
           </div>
@@ -552,16 +556,16 @@ export default function RateLimitsPage() {
         {/* Overrides Table */}
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
           {overrides.length === 0 ? (
-            <p className="p-4 text-sm text-gray-500">尚無 Model Override 設定</p>
+            <p className="p-4 text-sm text-gray-500">{t('noOverrides')}</p>
           ) : (
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Tier</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Model Tag</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">{t('modelTagLabel')}</th>
                   <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">RPM</th>
                   <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">TPM</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">操作</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">{t('operations')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -579,7 +583,7 @@ export default function RateLimitsPage() {
                         />
                       ) : (
                         <span className={override.rpm === -1 ? 'text-gray-400 italic' : ''}>
-                          {override.rpm === -1 ? '無限制' : override.rpm.toLocaleString()}
+                          {override.rpm === -1 ? tc('unlimited') : override.rpm.toLocaleString()}
                         </span>
                       )}
                     </td>
@@ -593,7 +597,7 @@ export default function RateLimitsPage() {
                         />
                       ) : (
                         <span className={override.tpm === -1 ? 'text-gray-400 italic' : ''}>
-                          {override.tpm === -1 ? '無限制' : override.tpm.toLocaleString()}
+                          {override.tpm === -1 ? tc('unlimited') : override.tpm.toLocaleString()}
                         </span>
                       )}
                     </td>
@@ -605,13 +609,13 @@ export default function RateLimitsPage() {
                             disabled={savingOverride}
                             className="px-3 py-1 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 disabled:opacity-50 transition-colors"
                           >
-                            {savingOverride ? '...' : '儲存'}
+                            {savingOverride ? '...' : tc('save')}
                           </button>
                           <button
                             onClick={() => setEditingOverride(null)}
                             className="px-3 py-1 bg-gray-100 text-gray-700 text-xs font-medium rounded hover:bg-gray-200 transition-colors"
                           >
-                            取消
+                            {tc('cancel')}
                           </button>
                         </div>
                       ) : (
@@ -620,14 +624,14 @@ export default function RateLimitsPage() {
                             onClick={() => handleStartEditOverride(override)}
                             className="px-3 py-1 bg-gray-100 text-gray-700 text-xs font-medium rounded hover:bg-gray-200 transition-colors"
                           >
-                            編輯
+                            {tc('edit')}
                           </button>
                           <button
                             onClick={() => handleDeleteOverride(override.id)}
                             disabled={deletingOverride === override.id}
                             className="px-3 py-1 bg-red-50 text-red-600 text-xs font-medium rounded hover:bg-red-100 disabled:opacity-50 transition-colors"
                           >
-                            {deletingOverride === override.id ? '...' : '刪除'}
+                            {deletingOverride === override.id ? '...' : tc('delete')}
                           </button>
                         </div>
                       )}

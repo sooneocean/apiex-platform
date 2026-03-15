@@ -3,13 +3,14 @@
     "version": "3.0.0",
     "feature": "rate-limit-v2",
     "feature_name": "Rate Limiting v2（Redis + 模型級限流 + Admin UI）",
-    "current_stage": "S4",
+    "current_stage": "S7_DONE",
     "spec_mode": "full",
     "spec_mode_reason": "重構現有架構 + 新增 DB 表 + 新增 Admin UI，需完整 spec 指導",
     "work_type": "refactor",
     "spec_folder": "dev/specs/rate-limit-v2",
     "execution_mode": "autopilot",
-    "status": "in_progress",
+    "status": "completed",
+    "completed_at": "2026-03-15T19:30:00+08:00",
     "started_at": "2026-03-15T14:00:00+08:00",
     "last_updated": "2026-03-15T15:30:00+08:00",
     "last_updated_by": "architect",
@@ -207,6 +208,106 @@
             "build": ["cd packages/web-admin && pnpm build"]
           }
         }
+      },
+      "s4": {
+        "status": "completed",
+        "agents": ["backend-developer", "frontend-developer"],
+        "started_at": "2026-03-15T15:30:00+08:00",
+        "completed_at": "2026-03-15T16:00:00+08:00",
+        "output": {
+          "build_status": "pending_verification",
+          "completed_tasks": [
+            { "id": "T1", "sc": "SC-7", "status": "completed", "file": "supabase/migrations/011_model_rate_overrides.sql" },
+            { "id": "T2", "sc": "SC-1,SC-2,SC-3", "status": "completed", "file": "packages/api-server/src/lib/RateLimiter.ts" },
+            { "id": "T3", "sc": "SC-5,SC-6", "status": "completed", "files": ["packages/api-server/src/middleware/rateLimitMiddleware.ts", "packages/api-server/src/routes/proxy.ts"] },
+            { "id": "T4", "sc": "SC-7,SC-8,SC-9,SC-10", "status": "completed", "file": "packages/api-server/src/routes/admin.ts" },
+            { "id": "T5", "sc": "SC-8,SC-9,SC-10", "status": "completed", "file": "packages/web-admin/src/app/admin/(protected)/settings/rate-limits/page.tsx" },
+            { "id": "T6", "sc": "SC-4,SC-11", "status": "completed", "file": "packages/api-server/src/lib/__tests__/RateLimiter.test.ts" }
+          ],
+          "changes": [
+            "supabase/migrations/011_model_rate_overrides.sql",
+            "packages/api-server/src/lib/RateLimiter.ts",
+            "packages/api-server/src/middleware/rateLimitMiddleware.ts",
+            "packages/api-server/src/routes/proxy.ts",
+            "packages/api-server/src/routes/admin.ts",
+            "packages/api-server/src/lib/__tests__/RateLimiter.test.ts",
+            "packages/api-server/package.json",
+            "packages/web-admin/src/app/admin/(protected)/settings/rate-limits/page.tsx",
+            "packages/web-admin/src/lib/api.ts",
+            "packages/web-admin/src/components/AppLayout.tsx",
+            "packages/web-admin/messages/zh-TW.json",
+            "packages/web-admin/messages/en.json"
+          ]
+        }
+      },
+      "s5": {
+        "status": "completed",
+        "repair_loop_count": 1,
+        "output": {
+          "conclusion": "pass",
+          "score": 88,
+          "review_scope": "scoped",
+          "issues": { "p0_critical": 0, "p1_blocking": 0, "p2_recommended": 2 },
+          "blocking_fixes": [],
+          "fixes_applied": [
+            "CR-P1-001: record() counterKey 不一致 — 加入 lastCounterKey cache，record() 自動對齊 check() 使用的 counterKey",
+            "CR-P1-002: Frontend rate-limits page 缺少 i18n — 新增 rateLimits namespace + 全頁面 useTranslations",
+            "CR-P2-001: updateOverride API client type 移除 model_tag（後端不接受）"
+          ],
+          "spec_verification": {
+            "sc_pass_rate": "11/11",
+            "scope_consistency": "pass",
+            "dod_pass_rate": "6/6"
+          }
+        }
+      },
+      "s6": {
+        "status": "completed",
+        "agent": "test-engineer",
+        "output": {
+          "automated_tests": { "vitest": "pass", "tsc_web_admin": "pass", "tsc_api_server": "pass" },
+          "test_stats": { "total_files": 19, "total_tests": 249, "passed": 249, "failed": 0 },
+          "ac_verification": { "total": 12, "passed": 11, "conditional": 1, "failed": 0 },
+          "ac_details": {
+            "AC-11_note": "Pipeline design confirmed, actual latency depends on Upstash deployment region"
+          },
+          "defects": [],
+          "repair_loop_count": 0,
+          "recommendation": "all_pass"
+        }
+      },
+      "s7": {
+        "status": "completed",
+        "output": {
+          "branch": "main",
+          "changes": {
+            "modified": [
+              "packages/api-server/src/lib/RateLimiter.ts",
+              "packages/web-admin/src/app/admin/(protected)/settings/rate-limits/page.tsx",
+              "packages/web-admin/src/lib/api.ts",
+              "packages/web-admin/messages/zh-TW.json",
+              "packages/web-admin/messages/en.json",
+              "dev/specs/rate-limit-v2/sdd_context.json"
+            ]
+          },
+          "stats": "6 files changed (S5 fixes: counterKey bug, i18n, type fix)"
+        }
+      },
+      "lessons_learned": {
+        "what_went_well": [
+          "CounterBackend interface 抽象乾淨，MemoryCounterBackend 和 RedisCounterBackend 可獨立測試",
+          "Redis pipeline 批次操作設計減少 RTT，符合效能要求",
+          "model_rate_overrides 獨立表 + FK CASCADE 設計，tier 刪除時自動清理 override",
+          "Admin API 8 端點一次到位，含完整驗證和 409 衝突處理"
+        ],
+        "what_went_wrong": [
+          "record() 的 counterKey 沒有與 check() 對齊 — check() 在無 model override 時用 keyId，但 record() 永遠用 keyId:model，導致 token correction 失效",
+          "Frontend rate-limits page 全部 hardcoded 中文，完全沒有 i18n — 漏掉 T5 DoD 的 i18n 要求"
+        ],
+        "new_pitfalls": [
+          "當 check() 和 record() 使用不同的 counterKey 邏輯時，必須確保兩者一致。建議用 lastCounterKey cache 或讓 check() 回傳 counterKey 供 record() 使用。",
+          "新增 Admin CRUD 頁面時必須使用 useTranslations()，不可 hardcode 字串。CI 應有 lint 規則檢查 page.tsx 是否 import useTranslations。"
+        ]
       }
     }
   }
