@@ -89,7 +89,7 @@ export function proxyRoutes() {
 
         // Fire-and-forget: settle quota + log usage + record spend
         keyService.settleQuota(apiKeyId, estimatedTokens, usage.total_tokens).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
-        rateLimiter.record(apiKeyId, usage.total_tokens)
+        rateLimiter.record(apiKeyId, usage.total_tokens, body.model)
         const logEntry: UsageLogEntry = {
           apiKeyId,
           modelTag: route.tag,
@@ -143,7 +143,7 @@ export function proxyRoutes() {
           const usage = result.usage
 
           keyService.settleQuota(apiKeyId, estimatedTokens, usage.total_tokens).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
-          rateLimiter.record(apiKeyId, usage.total_tokens)
+          rateLimiter.record(apiKeyId, usage.total_tokens, body.model)
           const logEntry: UsageLogEntry = {
             apiKeyId,
             modelTag: route.tag,

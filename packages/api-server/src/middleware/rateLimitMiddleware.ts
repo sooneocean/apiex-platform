@@ -6,16 +6,18 @@ export async function rateLimitMiddleware(c: Context, next: Next) {
   const apiKeyId = c.get('apiKeyId') as string
   const tier = (c.get('apiKeyTier') as string) ?? 'free'
 
-  // Parse body to get estimated tokens
+  // Parse body to get estimated tokens and model
   let estimatedTokens = 4096
+  let model: string | undefined
   try {
     const body = await c.req.json()
     if (body.max_tokens && typeof body.max_tokens === 'number') {
       estimatedTokens = body.max_tokens
     }
+    model = body?.model as string | undefined
   } catch { /* body parse failed — use default */ }
 
-  const result = await rateLimiter.check(apiKeyId, tier, estimatedTokens)
+  const result = await rateLimiter.check(apiKeyId, tier, estimatedTokens, model)
 
   if (!result.allowed) {
     const headers: Record<string, string> = {

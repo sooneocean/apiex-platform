@@ -154,6 +154,7 @@ class RedisCounterBackend implements CounterBackend {
 export class RateLimiter {
   private backend: CounterBackend
   private configCache = new Map<string, { config: RateLimitConfig; cachedAt: number }>()
+  private modelOverrideCache: Map<string, { config: { rpm: number; tpm: number } | null; cachedAt: number }> = new Map()
   private db: typeof supabaseAdmin
 
   constructor(backend?: CounterBackend, db?: typeof supabaseAdmin) {
@@ -161,7 +162,34 @@ export class RateLimiter {
     this.db = db ?? supabaseAdmin
   }
 
-  async check(keyId: string, tier: string, estimatedTokens: number): Promise<RateLimitResult> {
+  async getModelConfig(tier: string, model: string): Promise<{ rpm: number; tpm: number } | null> {
+    const cacheKey = `${tier}:${model}`
+    const cached = this.modelOverrideCache.get(cacheKey)
+    if (cached && Date.now() - cached.cachedAt < CONFIG_CACHE_TTL_MS) {
+      return cached.config
+    }
+
+    const { data, error } = await this.db
+      .from('model_rate_overrides')
+      .select('rpm, tpm')
+      .eq('tier', tier)
+      .eq('model_tag', model)
+      .single()
+
+    if (error || !data) {
+      this.modelOverrideCache.set(cacheKey, { config: null, cachedAt: Date.now() })
+      return null
+    }
+
+    const config = {
+      rpm: (data as { rpm: number; tpm: number }).rpm,
+      tpm: (data as { rpm: number; tpm: number }).tpm,
+    }
+    this.modelOverrideCache.set(cacheKey, { config, cachedAt: Date.now() })
+    return config
+  }
+
+  async check(keyId: string, tier: string, estimatedTokens: number, model?: string): Promise<RateLimitResult> {
     const config = await this.getConfig(tier)
 
     // Unlimited tier — bypass all checks
@@ -169,42 +197,52 @@ export class RateLimiter {
       return { allowed: true, limits: { rpm: -1, tpm: -1 }, remaining: { rpm: -1, tpm: -1 } }
     }
 
+    // Resolve model-level override if model is provided
+    let effectiveLimits = { rpm: config.rpm, tpm: config.tpm }
+    let counterKey = keyId
+    if (model) {
+      const override = await this.getModelConfig(tier, model)
+      if (override) {
+        effectiveLimits = { rpm: override.rpm, tpm: override.tpm }
+        counterKey = `${keyId}:${model}`
+      }
+    }
+
     let counts: { rpm: number; tpm: number }
     try {
-      counts = await this.backend.getCounts(keyId)
+      counts = await this.backend.getCounts(counterKey)
     } catch (err) {
       console.warn('[RateLimiter] Backend error in getCounts, degrading to memory for this call:', err)
       const memBackend = new MemoryCounterBackend()
-      counts = await memBackend.getCounts(keyId)
+      counts = await memBackend.getCounts(counterKey)
     }
 
     const { rpm: currentRpm, tpm: currentTpm } = counts
-    const limits = { rpm: config.rpm, tpm: config.tpm }
-    const now = Date.now()
+    const limits = { rpm: effectiveLimits.rpm, tpm: effectiveLimits.tpm }
 
     // Check RPM
-    if (config.rpm !== -1 && currentRpm >= config.rpm) {
+    if (effectiveLimits.rpm !== -1 && currentRpm >= effectiveLimits.rpm) {
       return {
         allowed: false,
         limits,
-        remaining: { rpm: 0, tpm: Math.max(0, config.tpm - currentTpm) },
+        remaining: { rpm: 0, tpm: Math.max(0, effectiveLimits.tpm - currentTpm) },
         retryAfter: 1,
       }
     }
 
     // Check TPM
-    if (config.tpm !== -1 && currentTpm + estimatedTokens > config.tpm) {
+    if (effectiveLimits.tpm !== -1 && currentTpm + estimatedTokens > effectiveLimits.tpm) {
       return {
         allowed: false,
         limits,
-        remaining: { rpm: Math.max(0, config.rpm - currentRpm - 1), tpm: 0 },
+        remaining: { rpm: Math.max(0, effectiveLimits.rpm - currentRpm - 1), tpm: 0 },
         retryAfter: 1,
       }
     }
 
     // Record this request
     try {
-      await this.backend.recordRequest(keyId, estimatedTokens)
+      await this.backend.recordRequest(counterKey, estimatedTokens)
     } catch (err) {
       console.warn('[RateLimiter] Backend error in recordRequest, skipping record:', err)
     }
@@ -213,15 +251,16 @@ export class RateLimiter {
       allowed: true,
       limits,
       remaining: {
-        rpm: config.rpm === -1 ? -1 : Math.max(0, config.rpm - currentRpm - 1),
-        tpm: config.tpm === -1 ? -1 : Math.max(0, config.tpm - currentTpm - estimatedTokens),
+        rpm: effectiveLimits.rpm === -1 ? -1 : Math.max(0, effectiveLimits.rpm - currentRpm - 1),
+        tpm: effectiveLimits.tpm === -1 ? -1 : Math.max(0, effectiveLimits.tpm - currentTpm - estimatedTokens),
       },
     }
   }
 
-  record(keyId: string, actualTokens: number): void {
+  record(keyId: string, actualTokens: number, model?: string): void {
+    const counterKey = model ? `${keyId}:${model}` : keyId
     // Fire-and-forget; ignore errors silently
-    this.backend.correctTokens(keyId, 0, actualTokens).catch(err => {
+    this.backend.correctTokens(counterKey, 0, actualTokens).catch(err => {
       console.warn('[RateLimiter] Backend error in correctTokens:', err)
     })
   }
