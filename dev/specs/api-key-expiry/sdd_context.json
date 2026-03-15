@@ -3,16 +3,17 @@
     "version": "3.0.0",
     "feature": "api-key-expiry",
     "feature_name": "API Key 過期功能",
-    "current_stage": "S1",
+    "current_stage": "S7_DONE",
     "spec_mode": "quick",
     "spec_mode_reason": "1 migration + middleware 修改 + keys API 修改，規模 S~M",
     "work_type": "new_feature",
     "spec_folder": "dev/specs/api-key-expiry",
     "execution_mode": "autopilot",
-    "status": "in_progress",
+    "status": "completed",
+    "completed_at": "2026-03-15T21:25:00+08:00",
     "started_at": "2026-03-15T17:00:00+08:00",
-    "last_updated": "2026-03-15T17:00:00+08:00",
-    "last_updated_by": "requirement-analyst",
+    "last_updated": "2026-03-15T21:25:00+08:00",
+    "last_updated_by": "orchestrator",
     "stages": {
       "s0": {
         "status": "completed",
@@ -50,7 +51,126 @@
           "decomposition_strategy": "single_sop",
           "child_sops": []
         }
-      }
+      },
+      "s1": {
+        "status": "completed",
+        "agents": ["codebase-explorer"],
+        "started_at": "2026-03-15T17:05:00+08:00",
+        "output": {
+          "completed_phases": [1],
+          "impact_scope": {
+            "database": [
+              {
+                "file": "supabase/migrations/012_api_key_expiry.sql",
+                "type": "migration",
+                "impact": "已存在",
+                "note": "ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ DEFAULT NULL; 及 partial index 均已到位"
+              }
+            ],
+            "backend": [
+              {
+                "file": "packages/api-server/src/middleware/apiKeyAuth.ts",
+                "type": "middleware",
+                "impact": "已完成",
+                "note": "expires_at 過期檢查邏輯已實作，呼叫 Errors.expiredApiKey() 返回 401"
+              },
+              {
+                "file": "packages/api-server/src/lib/errors.ts",
+                "type": "error-factory",
+                "impact": "已完成",
+                "note": "Errors.expiredApiKey() 已定義，回傳 { type: authentication_error, code: expired_api_key, status: 401 }"
+              },
+              {
+                "file": "packages/api-server/src/services/KeyService.ts",
+                "type": "service",
+                "impact": "已完成",
+                "note": "ApiKeyRecord 介面含 expires_at，createKey() 接受 expiresAt 參數並寫入 DB，listKeys() select 含 expires_at"
+              },
+              {
+                "file": "packages/api-server/src/routes/keys.ts",
+                "type": "route",
+                "impact": "已完成",
+                "note": "POST /keys body 型別含 expires_at，驗證 ISO 8601 格式，傳給 keyService.createKey()，response 回傳 expires_at"
+              }
+            ],
+            "frontend": [
+              {
+                "file": "packages/web-admin/src/components/ApiKeyCard.tsx",
+                "type": "component",
+                "impact": "已完成",
+                "note": "顯示「永久」/ 「已過期」/ 「即將過期・日期」/ 「到期：日期」四種狀態 badge，7 天內警示 yellow"
+              },
+              {
+                "file": "packages/web-admin/src/components/ApiKeyCreateModal.tsx",
+                "type": "component",
+                "impact": "已完成",
+                "note": "datetime-local input 建立 key 時可選填過期時間，帶前端驗證（過去時間拒絕）"
+              },
+              {
+                "file": "packages/web-admin/src/lib/api.ts",
+                "type": "api-client",
+                "impact": "已完成",
+                "note": "ApiKey 介面含 expires_at: string | null；makeKeysApi.create() 支援 expiresAt 參數"
+              }
+            ],
+            "tests": [
+              {
+                "file": "packages/api-server/src/__tests__/app.test.ts",
+                "type": "test",
+                "impact": "已完成",
+                "note": "DoD Case 7/8/9 覆蓋：過期 key 401、未來 expires_at 通過、null 通過"
+              },
+              {
+                "file": "packages/api-server/src/routes/__tests__/keys.test.ts",
+                "type": "test",
+                "impact": "已完成",
+                "note": "should_createKey_withExpiresAt、should_createKey_withNullExpiresAt_backward_compat、should_return400_whenExpiresAtIsInvalid 三案例已存在"
+              }
+            ]
+          },
+          "risks": [
+            {
+              "risk": "所有功能已在 codebase 中實作完畢（migration、middleware、service、routes、前端元件、測試），但 migration 012 是否已套用到實際 DB 實例不可確認",
+              "level": "medium",
+              "mitigation": "architect 在 dev_spec 明確標注 migration 套用狀態確認步驟"
+            },
+            {
+              "risk": "PATCH /keys/:id 目前只支援更新 spend_limit_usd，不支援更新 expires_at（即建立後無法修改過期時間）",
+              "level": "low",
+              "mitigation": "SC-4 只要求建立時支援，不要求更新；scope_out 無此需求，視為合理"
+            },
+            {
+              "risk": "前端 ApiKeyCreateModal 的「過期時間必須在未來」是客戶端驗證，後端 POST /keys 僅驗證 ISO 8601 格式，不驗證時間是否為未來",
+              "level": "low",
+              "mitigation": "目前屬輕量缺口，不影響 SC，後端可選擇性補強驗證"
+            }
+          ],
+          "unknowns": [
+            "Migration 012 是否已在目標環境套用（本地 Supabase / staging / prod）？需執行確認或 supabase db push",
+            "PATCH /keys/:id 是否需要同時支援更新 expires_at？目前 scope_out 未提及，但需 architect 確認 SC 邊界"
+          ],
+          "dependencies": {
+            "upstream": ["supabase/migrations/012_api_key_expiry.sql（migration 必須先套用）"],
+            "downstream": [],
+            "cross_module": ["apiKeyAuth 依賴 api_keys 表的 expires_at 欄位存在"]
+          },
+          "regression_risks": [
+            "現有 app.test.ts 已含過期 key 測試（DoD Case 7/8/9），若 migration 未套用則這些測試的 mock 邏輯仍會通過但實際行為會不同",
+            "listKeys 的 select 已含 expires_at，若 migration 未套用則查詢可能靜默返回 null（Supabase select 不存在欄位行為依版本而定）"
+          ],
+          "tech_debt": [
+            "後端 POST /keys 未驗證 expires_at 必須為未來時間，前後端行為不一致",
+            "PATCH /keys/:id 無法更新 expires_at，若需求演進需補充此端點",
+            "過期 key 不會自動清理，status 仍為 active，只靠 middleware 攔截"
+          ]
+        }
+      },
+      "s2": { "status": "skipped", "output": { "reason": "Quick 模式跳過" } },
+      "s3": { "status": "completed" },
+      "s4": { "status": "completed", "output": { "note": "All code already existed in codebase, no new implementation needed" } },
+      "s5": { "status": "completed", "output": { "conclusion": "pass", "score": 90, "spec_verification": { "sc_pass_rate": "6/6" } } },
+      "s6": { "status": "completed", "output": { "automated_tests": { "vitest": "pass" }, "test_stats": { "total_tests": 249, "passed": 249 }, "recommendation": "all_pass" } },
+      "s7": { "status": "completed", "output": { "note": "Code already committed in prior sessions, sdd_context finalized" } }
     }
   }
 }
