@@ -577,6 +577,52 @@ export function makeAdminWebhooksApi(token: string) {
   }
 }
 
+// ─── Rate Limit Types ─────────────────────────────────────────────────────────
+
+export interface RateLimitTier {
+  tier: string
+  rpm: number
+  tpm: number
+  created_at: string
+}
+
+export interface ModelRateOverride {
+  id: string
+  tier: string
+  model_tag: string
+  rpm: number
+  tpm: number
+  created_at: string
+}
+
+// ─── Rate Limit API Factories ─────────────────────────────────────────────────
+
+export function makeRateLimitsApi(token: string) {
+  return {
+    // Tier CRUD
+    listTiers: () =>
+      apiGet<{ data: RateLimitTier[] }>('/admin/rate-limits/tiers', token),
+    createTier: (data: { tier: string; rpm: number; tpm: number }) =>
+      apiPost<{ data: RateLimitTier }>('/admin/rate-limits/tiers', data, token),
+    updateTier: (tier: string, data: { rpm?: number; tpm?: number }) =>
+      apiPatch<{ data: RateLimitTier }>(`/admin/rate-limits/tiers/${tier}`, data, token),
+    deleteTier: (tier: string) =>
+      apiDelete<{ data: { tier: string; deleted: boolean } }>(`/admin/rate-limits/tiers/${tier}`, token),
+
+    // Model Override CRUD
+    listOverrides: (tier?: string) => {
+      const qs = tier ? `?tier=${encodeURIComponent(tier)}` : ''
+      return apiGet<{ data: ModelRateOverride[] }>(`/admin/rate-limits/overrides${qs}`, token)
+    },
+    createOverride: (data: { tier: string; model_tag: string; rpm: number; tpm: number }) =>
+      apiPost<{ data: ModelRateOverride }>('/admin/rate-limits/overrides', data, token),
+    updateOverride: (id: string, data: { model_tag?: string; rpm?: number; tpm?: number }) =>
+      apiPatch<{ data: ModelRateOverride }>(`/admin/rate-limits/overrides/${id}`, data, token),
+    deleteOverride: (id: string) =>
+      apiDelete<{ data: { id: string; deleted: boolean } }>(`/admin/rate-limits/overrides/${id}`, token),
+  }
+}
+
 export function makeRoutesApi(getToken: () => Promise<string>) {
   return {
     list: async (signal?: AbortSignal) => {

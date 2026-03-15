@@ -25,6 +25,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
     { href: '/admin/settings/models', label: t('settingsModels') },
     { href: '/admin/settings/routes', label: t('settingsRoutes') },
     { href: '/admin/settings/webhooks', label: t('settingsWebhooks') },
+    { href: '/admin/settings/rate-limits', label: t('settingsRateLimits') },
   ]
 
   async function handleLogout() {

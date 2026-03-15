@@ -35,6 +35,7 @@
     "settingsModels": "Settings: Models",
     "settingsRoutes": "Settings: Routes",
     "settingsWebhooks": "Settings: Webhooks",
+    "settingsRateLimits": "Settings: Rate Limits",
     "logout": "登出"
   },
   "portalNav": {
