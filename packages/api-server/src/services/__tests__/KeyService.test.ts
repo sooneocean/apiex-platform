@@ -315,6 +315,8 @@ describe('KeyService', () => {
           prefix: 'apx-sk-a',
           status: 'active',
           quota_tokens: 100000,
+          spend_limit_usd: -1,
+          spent_usd: 0,
           created_at: new Date().toISOString(),
           key_hash: 'should-not-appear',
         },
@@ -325,6 +327,8 @@ describe('KeyService', () => {
           prefix: 'apx-sk-b',
           status: 'revoked',
           quota_tokens: 0,
+          spend_limit_usd: 5000,
+          spent_usd: 3200,
           created_at: new Date().toISOString(),
           key_hash: 'should-not-appear-2',
         },
@@ -342,9 +346,188 @@ describe('KeyService', () => {
       expect(result).toHaveLength(2)
       expect(result[0].id).toBe('key-1')
       expect(result[0].prefix).toBe('apx-sk-a')
+      expect(result[0].spend_limit_usd).toBe(-1)
+      expect(result[0].spent_usd).toBe(0)
+      expect(result[1].spend_limit_usd).toBe(5000)
+      expect(result[1].spent_usd).toBe(3200)
       // key_hash must NOT be in the returned data
       expect(result[0]).not.toHaveProperty('key_hash')
       expect(result[1]).not.toHaveProperty('key_hash')
+    })
+  })
+
+  // ────────────────────────────────────────────────────────────────
+  // Test 7: checkSpendLimit
+  // ────────────────────────────────────────────────────────────────
+  describe('checkSpendLimit', () => {
+    it('should return true when within limit (spent < limit)', async () => {
+      const rpcMock = supabaseAdmin.rpc as ReturnType<typeof vi.fn>
+      rpcMock.mockResolvedValueOnce({ data: true, error: null })
+
+      const result = await service.checkSpendLimit('key-123')
+
+      expect(result).toBe(true)
+      expect(rpcMock).toHaveBeenCalledWith('check_spend_limit', { p_key_id: 'key-123' })
+    })
+
+    it('should return false when spend limit exceeded (spent >= limit)', async () => {
+      const rpcMock = supabaseAdmin.rpc as ReturnType<typeof vi.fn>
+      rpcMock.mockResolvedValueOnce({ data: false, error: null })
+
+      const result = await service.checkSpendLimit('key-456')
+
+      expect(result).toBe(false)
+    })
+
+    it('should return false when key not found (data is null)', async () => {
+      const rpcMock = supabaseAdmin.rpc as ReturnType<typeof vi.fn>
+      rpcMock.mockResolvedValueOnce({ data: null, error: null })
+
+      const result = await service.checkSpendLimit('key-missing')
+
+      expect(result).toBe(false)
+    })
+
+    it('should return true when limit is -1 (unlimited)', async () => {
+      const rpcMock = supabaseAdmin.rpc as ReturnType<typeof vi.fn>
+      // DB function returns TRUE for -1 (unlimited)
+      rpcMock.mockResolvedValueOnce({ data: true, error: null })
+
+      const result = await service.checkSpendLimit('key-unlimited')
+
+      expect(result).toBe(true)
+    })
+
+    it('should throw when RPC returns error', async () => {
+      const rpcMock = supabaseAdmin.rpc as ReturnType<typeof vi.fn>
+      rpcMock.mockResolvedValueOnce({ data: null, error: { message: 'DB error' } })
+
+      await expect(service.checkSpendLimit('key-err')).rejects.toThrow('Failed to check spend limit')
+    })
+  })
+
+  // ────────────────────────────────────────────────────────────────
+  // Test 8: recordSpend
+  // ────────────────────────────────────────────────────────────────
+  describe('recordSpend', () => {
+    it('should call record_spend RPC with correct params', async () => {
+      const rpcMock = supabaseAdmin.rpc as ReturnType<typeof vi.fn>
+      rpcMock.mockResolvedValueOnce({ data: null, error: null })
+
+      await service.recordSpend('key-123', 150)
+
+      expect(rpcMock).toHaveBeenCalledWith('record_spend', {
+        p_key_id: 'key-123',
+        p_amount_cents: 150,
+      })
+    })
+
+    it('should skip RPC when amountCents is 0', async () => {
+      const rpcMock = supabaseAdmin.rpc as ReturnType<typeof vi.fn>
+
+      await service.recordSpend('key-123', 0)
+
+      expect(rpcMock).not.toHaveBeenCalled()
+    })
+
+    it('should skip RPC when amountCents is negative', async () => {
+      const rpcMock = supabaseAdmin.rpc as ReturnType<typeof vi.fn>
+
+      await service.recordSpend('key-123', -5)
+
+      expect(rpcMock).not.toHaveBeenCalled()
+    })
+
+    it('should throw when RPC returns error', async () => {
+      const rpcMock = supabaseAdmin.rpc as ReturnType<typeof vi.fn>
+      rpcMock.mockResolvedValueOnce({ data: null, error: { message: 'Write failed' } })
+
+      await expect(service.recordSpend('key-123', 100)).rejects.toThrow('Failed to record spend')
+    })
+  })
+
+  // ────────────────────────────────────────────────────────────────
+  // Test 9: createKey with spend_limit_usd
+  // ────────────────────────────────────────────────────────────────
+  describe('createKey with spend_limit_usd', () => {
+    it('should pass spend_limit_usd to DB insert', async () => {
+      const mockInsert = {
+        data: {
+          id: 'key-spend',
+          user_id: 'user-abc',
+          name: 'Spend Key',
+          key_hash: 'stored-hash',
+          prefix: 'apx-sk-s',
+          status: 'active',
+          quota_tokens: -1,
+          spend_limit_usd: 10000,
+          spent_usd: 0,
+          created_at: new Date().toISOString(),
+        },
+        error: null,
+      }
+
+      const fromMock = supabaseAdmin.from as ReturnType<typeof vi.fn>
+      const quotaChain = {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({ data: null, error: { code: 'PGRST116' } }),
+      }
+      const insertChain = {
+        insert: vi.fn().mockReturnThis(),
+        select: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue(mockInsert),
+      }
+      fromMock.mockReturnValueOnce(quotaChain).mockReturnValueOnce(insertChain)
+
+      const result = await service.createKey('user-abc', 'Spend Key', 10000)
+
+      expect(result.spend_limit_usd).toBe(10000)
+      expect(result.spent_usd).toBe(0)
+      expect(insertChain.insert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          spend_limit_usd: 10000,
+          spent_usd: 0,
+        })
+      )
+    })
+
+    it('should default spend_limit_usd to -1 when not provided', async () => {
+      const mockInsert = {
+        data: {
+          id: 'key-default',
+          user_id: 'user-abc',
+          name: 'Default',
+          key_hash: 'hash',
+          prefix: 'apx-sk-d',
+          status: 'active',
+          quota_tokens: -1,
+          spend_limit_usd: -1,
+          spent_usd: 0,
+          created_at: new Date().toISOString(),
+        },
+        error: null,
+      }
+
+      const fromMock = supabaseAdmin.from as ReturnType<typeof vi.fn>
+      const quotaChain = {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({ data: null, error: { code: 'PGRST116' } }),
+      }
+      const insertChain = {
+        insert: vi.fn().mockReturnThis(),
+        select: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue(mockInsert),
+      }
+      fromMock.mockReturnValueOnce(quotaChain).mockReturnValueOnce(insertChain)
+
+      const result = await service.createKey('user-abc', 'Default')
+
+      expect(result.spend_limit_usd).toBe(-1)
+      expect(insertChain.insert).toHaveBeenCalledWith(
+        expect.objectContaining({ spend_limit_usd: -1 })
+      )
     })
   })
 })

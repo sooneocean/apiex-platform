@@ -10,6 +10,9 @@ const {
   mockReserveQuota,
   mockSettleQuota,
   mockLogUsage,
+  mockCheckSpendLimit,
+  mockRecordSpend,
+  mockGetEffectiveRate,
 } = vi.hoisted(() => ({
   mockSupabaseFrom: vi.fn(),
   mockResolveRoute: vi.fn(),
@@ -19,6 +22,9 @@ const {
   mockReserveQuota: vi.fn(),
   mockSettleQuota: vi.fn(),
   mockLogUsage: vi.fn(),
+  mockCheckSpendLimit: vi.fn(),
+  mockRecordSpend: vi.fn(),
+  mockGetEffectiveRate: vi.fn(),
 }))
 
 // Mock @supabase/supabase-js
@@ -46,6 +52,14 @@ vi.mock('../../services/KeyService.js', () => ({
   KeyService: vi.fn().mockImplementation(() => ({
     reserveQuota: mockReserveQuota,
     settleQuota: mockSettleQuota,
+    checkSpendLimit: mockCheckSpendLimit,
+    recordSpend: mockRecordSpend,
+  })),
+}))
+
+vi.mock('../../services/RatesService.js', () => ({
+  RatesService: vi.fn().mockImplementation(() => ({
+    getEffectiveRate: mockGetEffectiveRate,
   })),
 }))
 
@@ -84,6 +98,9 @@ describe('Proxy Routes', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockLogUsage.mockResolvedValue(undefined)
+    mockCheckSpendLimit.mockResolvedValue(true)  // default: within limit
+    mockRecordSpend.mockResolvedValue(undefined)
+    mockGetEffectiveRate.mockResolvedValue(null)  // default: no rate (cost = 0)
     app = createTestApp()
   })
 
@@ -281,6 +298,123 @@ describe('Proxy Routes', () => {
           status: 'error',
         })
       )
+    })
+  })
+
+  // ────────────────────────────────────────────────────────────────
+  // TC-9: spend limit exceeded → 402 spend_limit_exceeded
+  // ────────────────────────────────────────────────────────────────
+  describe('spend limit', () => {
+    it('should return 402 with spend_limit_exceeded when limit reached', async () => {
+      mockReserveQuota.mockResolvedValueOnce({ success: true, remainingTokens: 90000 })
+      // Spend limit exceeded
+      mockCheckSpendLimit.mockResolvedValueOnce(false)
+      mockSettleQuota.mockResolvedValueOnce(undefined)
+
+      const res = await app.request('/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'apex-smart',
+          messages: [{ role: 'user', content: 'hi' }],
+        }),
+      })
+
+      expect(res.status).toBe(402)
+      const json = await res.json()
+      expect(json.error.code).toBe('spend_limit_exceeded')
+      // resolveRoute must NOT have been called
+      expect(mockResolveRoute).not.toHaveBeenCalled()
+      // Quota must be refunded
+      await new Promise((r) => setTimeout(r, 20))
+      expect(mockSettleQuota).toHaveBeenCalled()
+    })
+
+    it('should record spend after successful non-streaming request', async () => {
+      const route = {
+        id: 'route-1',
+        tag: 'apex-smart',
+        upstream_provider: 'anthropic',
+        upstream_model: 'claude-sonnet-4-20250514',
+        upstream_base_url: 'https://api.anthropic.com',
+        is_active: true,
+      }
+      mockReserveQuota.mockResolvedValueOnce({ success: true, remainingTokens: 90000 })
+      mockCheckSpendLimit.mockResolvedValueOnce(true)
+      mockResolveRoute.mockResolvedValueOnce(route)
+
+      const openAIResponse = {
+        id: 'chatcmpl-2',
+        object: 'chat.completion',
+        created: 1000,
+        model: 'apex-smart',
+        choices: [{ index: 0, message: { role: 'assistant', content: 'Hi!' }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+      }
+      mockForward.mockResolvedValueOnce({ type: 'json', data: openAIResponse })
+      mockSettleQuota.mockResolvedValueOnce(undefined)
+
+      // Rate: input 0.01 per 1k, output 0.03 per 1k
+      // Cost = (100/1000)*0.01*100 + (50/1000)*0.03*100 = 0.1 + 0.15 = 0.25 cents → Math.round = 0
+      // Use larger values to get non-zero cost
+      mockGetEffectiveRate.mockResolvedValueOnce({
+        model_tag: 'apex-smart',
+        input_rate_per_1k: 10,    // $10 per 1k tokens
+        output_rate_per_1k: 30,   // $30 per 1k tokens
+        effective_from: '2026-01-01',
+      })
+
+      const res = await app.request('/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'apex-smart',
+          messages: [{ role: 'user', content: 'hi' }],
+        }),
+      })
+
+      expect(res.status).toBe(200)
+      // Give fire-and-forget a tick
+      await new Promise((r) => setTimeout(r, 30))
+
+      // cost = (100/1000)*10*100 + (50/1000)*30*100 = 100 + 150 = 250 cents
+      expect(mockRecordSpend).toHaveBeenCalledWith('key-123', 250)
+    })
+
+    it('should NOT record spend when no rate is configured', async () => {
+      const route = {
+        id: 'route-1',
+        tag: 'apex-smart',
+        upstream_provider: 'anthropic',
+        upstream_model: 'claude-sonnet-4-20250514',
+        upstream_base_url: 'https://api.anthropic.com',
+        is_active: true,
+      }
+      mockReserveQuota.mockResolvedValueOnce({ success: true, remainingTokens: 90000 })
+      mockCheckSpendLimit.mockResolvedValueOnce(true)
+      mockResolveRoute.mockResolvedValueOnce(route)
+
+      const openAIResponse = {
+        id: 'chatcmpl-3',
+        object: 'chat.completion',
+        created: 1000,
+        model: 'apex-smart',
+        choices: [{ index: 0, message: { role: 'assistant', content: 'Hi!' }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      }
+      mockForward.mockResolvedValueOnce({ type: 'json', data: openAIResponse })
+      mockSettleQuota.mockResolvedValueOnce(undefined)
+      mockGetEffectiveRate.mockResolvedValueOnce(null)  // No rate configured
+
+      await app.request('/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'apex-smart', messages: [{ role: 'user', content: 'hi' }] }),
+      })
+
+      await new Promise((r) => setTimeout(r, 30))
+      // recordSpend must NOT be called when rate is null (E2 exception case)
+      expect(mockRecordSpend).not.toHaveBeenCalled()
     })
   })
 
