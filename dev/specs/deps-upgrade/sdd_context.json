@@ -1,0 +1,320 @@
+{
+  "sdd_context": {
+    "version": "3.0.0",
+    "feature": "deps-upgrade",
+    "feature_name": "全專案依賴升級（Next.js 16 + Vitest 4 + pnpm 10）",
+    "current_stage": "S7",
+    "spec_mode": "full",
+    "spec_mode_reason": "跨所有 package、3 個 breaking change（Next.js 16、Vitest 4、pnpm 10）、需完整測試遷移",
+    "work_type": "refactor",
+    "spec_folder": "dev/specs/deps-upgrade",
+    "execution_mode": "autopilot",
+    "status": "completed",
+    "completed_at": "2026-03-16T00:15:00+08:00",
+    "started_at": "2026-03-15T22:00:00+08:00",
+    "last_updated": "2026-03-15T23:00:00+08:00",
+    "last_updated_by": "architect",
+    "stages": {
+      "s0": {
+        "status": "completed",
+        "agent": "requirement-analyst",
+        "started_at": "2026-03-15T22:00:00+08:00",
+        "completed_at": "2026-03-15T22:05:00+08:00",
+        "output": {
+          "work_type": "refactor",
+          "requirement": "全專案依賴升級至最新版本，含 Next.js 16、Vitest 4、pnpm 10 三個 breaking change",
+          "goal": "消除技術債，所有依賴為當前最新穩定版",
+          "pain_points": ["依賴版本落後，安全風險與功能缺失"],
+          "success_criteria": [
+            "SC-1: 所有 package.json 升至最新版本",
+            "SC-2: pnpm build 全 package 通過",
+            "SC-3: 全部 249+ 測試通過（Vitest 4 遷移後）",
+            "SC-4: Next.js 16 App Router 正常運行",
+            "SC-5: LLM proxy 正常運作（Anthropic SDK 0.78）",
+            "SC-6: Dockerfile 更新 pnpm 10 + 驗證建置",
+            "SC-7: pnpm-lock.yaml 乾淨無衝突"
+          ],
+          "scope_in": [
+            "Next.js 15→16",
+            "Vitest 2→4",
+            "pnpm 9→10",
+            "TypeScript 5.7→5.9",
+            "Anthropic SDK 0.39→0.78",
+            "Supabase JS 2.47→2.99, SSR 0.5→0.9",
+            "Hono 4.6→4.12",
+            "React 19.0→19.2",
+            "Turbo 2.3→2.8",
+            "所有其餘 minor/patch 依賴",
+            "Dockerfile pnpm 版本更新"
+          ],
+          "scope_out": [
+            "Node.js 版本升級（維持 22）",
+            "新功能開發",
+            "架構重構（純升級，不改設計）"
+          ],
+          "constraints": ["向後相容：升級後功能行為不變"],
+          "functional_areas": [
+            { "id": "FA-A", "name": "工具鏈升級", "description": "pnpm 10 + Turbo 2.8 + TypeScript 5.9", "independence": "high" },
+            { "id": "FA-B", "name": "後端依賴升級", "description": "Hono 4.12 + Anthropic SDK 移除 + Supabase 2.99 + OTel 不動", "independence": "high" },
+            { "id": "FA-C", "name": "前端依賴升級", "description": "Next.js 16 + React 19.2 + Radix + next-intl 驗證", "independence": "medium" },
+            { "id": "FA-D", "name": "測試框架升級", "description": "Vitest 2→4 + 測試遷移", "independence": "high" }
+          ],
+          "decomposition_strategy": "single_sop_fa_labeled",
+          "child_sops": [],
+          "exceptions": [
+            { "id": "E1", "dimension": "concurrency", "description": "pnpm workspace package 間有建置依賴順序", "mitigation": "Turbo pipeline 處理" },
+            { "id": "E2", "dimension": "state", "description": "lockfile 衝突", "mitigation": "刪除 node_modules + lockfile 重裝" },
+            { "id": "E3", "dimension": "data_boundary", "description": "Next.js 16 API 變更", "mitigation": "比對 migration guide" },
+            { "id": "E4", "dimension": "network", "description": "npm registry", "mitigation": "不影響" },
+            { "id": "E5", "dimension": "business_logic", "description": "Anthropic SDK 型別/方法名變更", "mitigation": "已決定移除 SDK，不 import 故無影響" },
+            { "id": "E6", "dimension": "ui", "description": "Next.js 16 hydration 行為變更", "mitigation": "全頁面驗證" }
+          ]
+        }
+      },
+      "s1": {
+        "status": "completed",
+        "agents": ["codebase-explorer", "architect"],
+        "started_at": "2026-03-15T22:10:00+08:00",
+        "completed_at": "2026-03-15T22:45:00+08:00",
+        "output": {
+          "completed_phases": [1, 2],
+          "dev_spec_path": "dev/specs/deps-upgrade/s1_dev_spec.md",
+          "impact_scope": {
+            "packages": [
+              {
+                "name": "root (package.json)",
+                "files": ["package.json", "turbo.json", "pnpm-workspace.yaml", "Dockerfile", "tsconfig.base.json"],
+                "impact": "high",
+                "notes": "pnpm 9→10 版本字串需更新；turbo 2.3→2.8；typescript 5.7→5.9；Dockerfile 兩處 pnpm@9.15.0 硬編碼需改為 pnpm@10.32.1"
+              },
+              {
+                "name": "packages/web-admin",
+                "files": ["package.json", "next.config.ts", "src/middleware.ts", "src/lib/supabase-server.ts"],
+                "impact": "high",
+                "notes": "Next.js 15→16 + React 19.0→19.2 + Supabase SSR 0.5→0.9 + next-intl 驗證"
+              },
+              {
+                "name": "packages/api-server",
+                "files": ["package.json", "vitest.config.ts", "22 個測試檔"],
+                "impact": "high",
+                "notes": "Hono 4.6→4.12 + Supabase JS 2.47→2.99 + 移除 @anthropic-ai/sdk + Vitest 2→4"
+              },
+              {
+                "name": "packages/cli",
+                "files": ["package.json", "vitest.config.ts", "1 個測試檔"],
+                "impact": "medium",
+                "notes": "Vitest 2→4；TypeScript 5.7→5.9"
+              },
+              {
+                "name": "packages/mcp-server",
+                "files": ["package.json", "vitest.config.ts", "1 個測試檔"],
+                "impact": "medium",
+                "notes": "Vitest 2→4；TypeScript 5.7→5.9"
+              }
+            ]
+          },
+          "tasks": [
+            { "id": "T1", "name": "Root package.json 工具鏈升級", "type": "toolchain", "agent": "general-purpose", "complexity": "S", "fa": "FA-A" },
+            { "id": "T2", "name": "Dockerfile pnpm 版本更新", "type": "toolchain", "agent": "general-purpose", "complexity": "S", "fa": "FA-A" },
+            { "id": "T3", "name": "api-server 依賴升級 + 移除 @anthropic-ai/sdk", "type": "backend", "agent": "general-purpose", "complexity": "S", "fa": "FA-B" },
+            { "id": "T4", "name": "cli 依賴升級", "type": "backend", "agent": "general-purpose", "complexity": "S", "fa": "FA-B" },
+            { "id": "T5", "name": "mcp-server 依賴升級", "type": "backend", "agent": "general-purpose", "complexity": "S", "fa": "FA-B" },
+            { "id": "T6", "name": "web-admin 依賴升級", "type": "frontend", "agent": "general-purpose", "complexity": "S", "fa": "FA-C" },
+            { "id": "T7", "name": "Lockfile 重新生成", "type": "toolchain", "agent": "general-purpose", "complexity": "S", "fa": "FA-A" },
+            { "id": "T8", "name": "Vitest 2→4 測試遷移", "type": "test", "agent": "general-purpose", "complexity": "M", "fa": "FA-D" },
+            { "id": "T9", "name": "Next.js 16 遷移 + next-intl 相容性驗證", "type": "frontend", "agent": "general-purpose", "complexity": "M", "fa": "FA-C" },
+            { "id": "T10", "name": "Supabase SSR 0.9 cookie API 適配", "type": "frontend", "agent": "general-purpose", "complexity": "M", "fa": "FA-C" },
+            { "id": "T11", "name": "Full Build 驗證", "type": "verification", "agent": "general-purpose", "complexity": "S", "fa": "all" },
+            { "id": "T12", "name": "Full Test 驗證", "type": "verification", "agent": "general-purpose", "complexity": "S", "fa": "FA-D" },
+            { "id": "T13", "name": "Dockerfile Build 驗證", "type": "verification", "agent": "general-purpose", "complexity": "S", "fa": "FA-A" }
+          ],
+          "acceptance_criteria": [
+            { "id": "SC-1", "scenario": "版本全部升級", "priority": "P0" },
+            { "id": "SC-2", "scenario": "pnpm build 全 package 通過", "priority": "P0" },
+            { "id": "SC-3", "scenario": "全部 249+ 測試通過", "priority": "P0" },
+            { "id": "SC-4", "scenario": "Next.js 16 App Router 正常運行", "priority": "P0" },
+            { "id": "SC-5", "scenario": "LLM proxy 正常運作（SDK 已移除，proxy 獨立）", "priority": "P1" },
+            { "id": "SC-6", "scenario": "Dockerfile 更新 pnpm 10 + 建置成功", "priority": "P1" },
+            { "id": "SC-7", "scenario": "pnpm-lock.yaml 乾淨無衝突", "priority": "P0" }
+          ],
+          "assumptions": [
+            "Next.js 16.1.6 GA 穩定可用",
+            "next-intl 4.8.3 與 Next.js 16 相容（需 T9 驗證）",
+            "OTel 系列已是最新，無需更新",
+            "@anthropic-ai/sdk 可安全移除（無 import）"
+          ],
+          "solution_summary": "分 5 波執行依賴升級：工具鏈基礎 → 各 package 版本號 → lockfile 重生成 → breaking change 遷移（Vitest 4 / Next.js 16 / Supabase SSR 0.9）→ 整合驗證。順手移除未使用的 @anthropic-ai/sdk 依賴。",
+          "tech_debt": [
+            "web-admin 無測試覆蓋，升級後缺乏自動化回歸保護",
+            "Dockerfile 硬編碼 pnpm 版本（本次修復但模式未改善）"
+          ],
+          "regression_risks": [
+            "Supabase SSR middleware cookie API",
+            "Vitest 4 mock hoisting（3 個 vi.hoisted 檔案）",
+            "next-intl + Next.js 16 整合",
+            "Hono streaming proxy response"
+          ],
+          "risks": [
+            { "id": "R2", "level": "high", "description": "next-intl 4.8.3 + Next.js 16 相容性" },
+            { "id": "R3", "level": "medium", "description": "Supabase SSR 0.9 cookie API 變更" },
+            { "id": "R4", "level": "medium", "description": "Vitest 4 vi.hoisted/vi.mock 行為變更" },
+            { "id": "R6", "level": "medium", "description": "pnpm 10 lockfile + --frozen-lockfile 行為" },
+            { "id": "R7", "level": "low", "description": "Hono 4.12 streaming API" },
+            { "id": "R1", "level": "eliminated", "description": "Next.js 16 未 GA — 已確認 16.1.6 GA" },
+            { "id": "R5", "level": "eliminated", "description": "OTel 版本矩陣 — 已是最新" },
+            { "id": "R8", "level": "eliminated", "description": "Anthropic SDK — 不 import，直接移除" }
+          ]
+        }
+      },
+      "s2": { "status": "completed", "output": { "conclusion": "pass", "mode": "short_circuit", "pre_review": { "P0": 0, "P1": 2, "P2": 1, "fixes_applied": ["SR-PRE-001: T13 補充 lockfile 前置條件", "SR-PRE-002: T9 DoD 補充 __dirname 明確項"], "dismissed": ["SR-PRE-004: vite 8.0.0 IS latest"] } } },
+      "s3": {
+        "status": "completed",
+        "agent": "architect",
+        "completed_at": "2026-03-15T23:00:00+08:00",
+        "output": {
+          "implementation_plan_path": "dev/specs/deps-upgrade/s3_implementation_plan.md",
+          "waves": [
+            {
+              "wave": 1,
+              "name": "工具鏈基礎",
+              "parallel": true,
+              "tasks": [
+                { "id": "T1", "name": "Root package.json 工具鏈升級", "agent": "general-purpose", "dependencies": [], "complexity": "S", "parallel": true, "tdd_plan": null, "skip_justification": "純 config/版本號變更，無可測邏輯" },
+                { "id": "T2", "name": "Dockerfile pnpm 版本更新", "agent": "general-purpose", "dependencies": [], "complexity": "S", "parallel": true, "tdd_plan": null, "skip_justification": "純 config/版本號變更，無可測邏輯" }
+              ]
+            },
+            {
+              "wave": 2,
+              "name": "各 package 版本號",
+              "parallel": true,
+              "tasks": [
+                { "id": "T3", "name": "api-server 依賴升級 + 移除 @anthropic-ai/sdk", "agent": "general-purpose", "dependencies": ["T1"], "complexity": "S", "parallel": true, "tdd_plan": null, "skip_justification": "純 config/版本號變更，無可測邏輯" },
+                { "id": "T4", "name": "cli 依賴升級", "agent": "general-purpose", "dependencies": ["T1"], "complexity": "S", "parallel": true, "tdd_plan": null, "skip_justification": "純 config/版本號變更，無可測邏輯" },
+                { "id": "T5", "name": "mcp-server 依賴升級", "agent": "general-purpose", "dependencies": ["T1"], "complexity": "S", "parallel": true, "tdd_plan": null, "skip_justification": "純 config/版本號變更，無可測邏輯" },
+                { "id": "T6", "name": "web-admin 依賴升級", "agent": "general-purpose", "dependencies": ["T1"], "complexity": "S", "parallel": true, "tdd_plan": null, "skip_justification": "純 config/版本號變更，無可測邏輯" }
+              ]
+            },
+            {
+              "wave": 3,
+              "name": "Lockfile 重生成",
+              "parallel": false,
+              "tasks": [
+                { "id": "T7", "name": "Lockfile 重新生成", "agent": "general-purpose", "dependencies": ["T3","T4","T5","T6"], "complexity": "S", "parallel": false, "tdd_plan": null, "skip_justification": "純 config/版本號變更，無可測邏輯" }
+              ]
+            },
+            {
+              "wave": 4,
+              "name": "Breaking Change 遷移",
+              "parallel": true,
+              "tasks": [
+                { "id": "T8", "name": "Vitest 2→4 測試遷移", "agent": "general-purpose", "dependencies": ["T7"], "complexity": "M", "parallel": true, "tdd_plan": null, "skip_justification": "遷移現有測試，不新增測試邏輯。驗證方式為跑通全部現有測試。" },
+                { "id": "T9", "name": "Next.js 16 遷移 + next-intl 相容性驗證", "agent": "general-purpose", "dependencies": ["T7"], "complexity": "M", "parallel": true, "tdd_plan": null, "skip_justification": "web-admin 無測試框架。驗證方式為 next build 成功。" },
+                { "id": "T10", "name": "Supabase SSR 0.9 cookie API 適配", "agent": "general-purpose", "dependencies": ["T7"], "complexity": "M", "parallel": true, "tdd_plan": null, "skip_justification": "cookie API 適配，驗證方式為 typecheck 通過。" }
+              ]
+            },
+            {
+              "wave": 5,
+              "name": "整合驗證",
+              "parallel": "T11+T12 可並行，T13 序列",
+              "tasks": [
+                { "id": "T11", "name": "Full Build 驗證", "agent": "general-purpose", "dependencies": ["T9","T10"], "complexity": "S", "parallel": true, "tdd_plan": null, "skip_justification": "純驗證任務，本身就是測試行為。" },
+                { "id": "T12", "name": "Full Test 驗證", "agent": "general-purpose", "dependencies": ["T8"], "complexity": "S", "parallel": true, "tdd_plan": null, "skip_justification": "純驗證任務，本身就是測試行為。" },
+                { "id": "T13", "name": "Dockerfile Build 驗證", "agent": "general-purpose", "dependencies": ["T11","T12"], "complexity": "S", "parallel": false, "tdd_plan": null, "skip_justification": "純驗證任務，本身就是測試行為。" }
+              ]
+            }
+          ],
+          "total_tasks": 13,
+          "estimated_waves": 5,
+          "verification": {
+            "build": ["pnpm build"],
+            "unit_tests": ["pnpm test"],
+            "typecheck": ["cd packages/web-admin && pnpm typecheck"],
+            "docker": ["docker build -t apiex-test ."]
+          }
+        }
+      },
+      "s4": {
+        "status": "completed",
+        "agent": "orchestrator",
+        "started_at": "2026-03-15T23:10:00+08:00",
+        "completed_at": "2026-03-16T00:00:00+08:00",
+        "output": {
+          "build_status": "pass",
+          "completed_tasks": [
+            { "id": "T1", "status": "completed", "sc": "SC-1" },
+            { "id": "T2", "status": "completed", "sc": "SC-6" },
+            { "id": "T3", "status": "completed", "sc": "SC-1,SC-5", "note": "@anthropic-ai/sdk removed" },
+            { "id": "T4", "status": "completed", "sc": "SC-1" },
+            { "id": "T5", "status": "completed", "sc": "SC-1" },
+            { "id": "T6", "status": "completed", "sc": "SC-1" },
+            { "id": "T7", "status": "completed", "sc": "SC-7", "note": "pnpm.onlyBuiltDependencies added for pnpm 10" },
+            { "id": "T8", "status": "completed", "sc": "SC-3", "note": "Vitest 4 tests pass (249/249), vi.hoisted compatible" },
+            { "id": "T9", "status": "completed", "sc": "SC-4", "note": "__dirname → import.meta.dirname; next build success; next-intl 4.8.3 compatible" },
+            { "id": "T10", "status": "completed", "sc": "SC-4", "note": "Supabase SSR 0.9 cookie API backward compatible, typecheck pass" },
+            { "id": "T11", "status": "completed", "sc": "SC-2", "note": "4/4 packages build success" },
+            { "id": "T12", "status": "completed", "sc": "SC-3", "note": "249 tests pass, 3/3 tasks" },
+            { "id": "T13", "status": "skipped", "sc": "SC-6", "note": "Docker daemon not running, cannot verify" }
+          ],
+          "changes": [
+            "package.json",
+            "Dockerfile",
+            "packages/api-server/package.json",
+            "packages/cli/package.json",
+            "packages/mcp-server/package.json",
+            "packages/web-admin/package.json",
+            "packages/web-admin/next.config.ts",
+            "pnpm-lock.yaml"
+          ]
+        }
+      },
+      "s5": {
+        "status": "completed",
+        "output": {
+          "conclusion": "pass",
+          "score": 92,
+          "review_scope": "scoped",
+          "issues": { "p0_critical": 0, "p1_blocking": 0, "p2_recommended": 1 },
+          "spec_verification": {
+            "sc_pass_rate": "6/7",
+            "sc_notes": "SC-6 Docker build 未驗證（daemon 未運行），Dockerfile 語法正確",
+            "scope_match": "consistent",
+            "dod_coverage": "12/13 tasks completed, T13 skipped"
+          }
+        }
+      },
+      "s6": {
+        "status": "completed",
+        "output": {
+          "automated_tests": { "vitest": "pass" },
+          "test_stats": { "total_tests": 258, "passed": 258, "failed": 0 },
+          "recommendation": "all_pass",
+          "notes": "Docker build skipped (daemon not running); all other verifications pass"
+        }
+      },
+      "s7": {
+        "status": "completed",
+        "output": {
+          "branch": "main",
+          "lessons_learned": {
+            "what_went_well": [
+              "pnpm 10 lockfile 全量重生成策略正確，無衝突",
+              "Next.js 16 與 next-intl 4.8.3 完全相容，零修改",
+              "Supabase SSR 0.9 cookie API 向後相容，無需修改",
+              "@anthropic-ai/sdk 安全移除確認（AnthropicAdapter 為純 HTTP）",
+              "Vitest 4 測試遷移已由 worktree agent 預先完成"
+            ],
+            "what_went_wrong": [
+              "Docker daemon 未運行導致 T13 無法驗證",
+              "OTel 和 next-intl 已是最新但 S0 時未先確認，浪費分析時間"
+            ],
+            "new_pitfalls": [
+              "pnpm 10 onlyBuiltDependencies 白名單",
+              "pnpm 9→10 lockfile 全量重裝",
+              "Next.js 16 __dirname → import.meta.dirname"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

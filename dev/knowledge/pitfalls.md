@@ -71,3 +71,15 @@
   — deps-upgrade (2026-03)
 - `vi.clearAllMocks()` 不清除 `mockReturnValueOnce` 佇列（vitest 4 對齊 Jest 行為）— 若測試有未消費的 mockReturnValueOnce 值會洩漏到下一個測試。使用 `vi.resetAllMocks()` 或確保每個測試消費所有 mock 值
   — deps-upgrade (2026-03)
+
+## pnpm 10 升級
+
+- pnpm 10 預設禁止 postinstall 等 build scripts — 需在 root `package.json` 加 `pnpm.onlyBuiltDependencies` 白名單（如 esbuild、@swc/core、sharp），否則 `pnpm install` 後原生模組不可用
+  — deps-upgrade (2026-03)
+- pnpm 9→10 lockfile 格式不相容 — 升級時必須刪除舊 `pnpm-lock.yaml` + `node_modules` 後用 pnpm 10 全量重裝
+  — deps-upgrade (2026-03)
+
+## Next.js 16 升級
+
+- `next.config.ts` 中 `__dirname` 在 Next.js 16 不再自動 polyfill — 必須改用 `import.meta.dirname`
+  — deps-upgrade (2026-03)
