@@ -104,6 +104,25 @@ export interface RouteConfigInsert {
   updated_at?: string;
 }
 
+export interface TopupLog {
+  id: string
+  user_id: string
+  stripe_session_id: string
+  stripe_event_id: string
+  amount_usd: number
+  tokens_granted: number
+  status: 'completed'
+  created_at: string
+}
+
+export interface TopupLogInsert {
+  user_id: string
+  stripe_session_id: string
+  stripe_event_id: string
+  amount_usd: number
+  tokens_granted: number
+}
+
 // ---------------------------------------------------------------------------
 // Update types (all fields optional)
 // ---------------------------------------------------------------------------
