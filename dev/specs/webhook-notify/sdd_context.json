@@ -3,16 +3,17 @@
     "version": "3.0.0",
     "feature": "webhook-notify-v2",
     "feature_name": "Webhook 用量通知（擴展）",
-    "current_stage": "S7",
+    "current_stage": "S7_completed",
     "spec_mode": "full",
     "spec_mode_reason": "擴展現有 Webhook 系統，涵蓋後端服務重構、DB Migration、API 新增、前端 2 頁面，需完整 spec 指導",
     "work_type": "new_feature",
     "spec_folder": "dev/specs/webhook-notify",
     "execution_mode": "autopilot",
-    "status": "in_progress",
+    "status": "completed",
     "started_at": "2026-03-15T10:00:00+08:00",
-    "last_updated": "2026-03-15T13:15:00+08:00",
-    "last_updated_by": "orchestrator",
+    "completed_at": "2026-03-15T13:30:00+08:00",
+    "last_updated": "2026-03-15T13:30:00+08:00",
+    "last_updated_by": "git-operator",
     "stages": {
       "s0": {
         "status": "completed",
@@ -243,6 +244,33 @@
           "defects": [],
           "repair_loop_count": 0,
           "recommendation": "all_pass"
+        }
+      },
+      "s7": {
+        "status": "completed",
+        "agent": "git-operator",
+        "started_at": "2026-03-15T13:15:00+08:00",
+        "completed_at": "2026-03-15T13:30:00+08:00",
+        "output": {
+          "branch": "main",
+          "changes": {
+            "specs": ["s0_brief_spec.md", "s1_dev_spec.md", "s1_api_spec.md", "s3_implementation_plan.md", "sdd_context.json"],
+            "knowledge": ["pitfalls.md"]
+          },
+          "lessons_learned": {
+            "what_went_well": [
+              "10 個任務按 5 個 Wave 順利完成，無返工",
+              "notification_logs dedup 方案比舊的 JSONB 掃描效率大幅提升",
+              "統一 payload 格式簡化了前後端契約",
+              "S5 Code Review 一次通過（95 分，0 P0/P1）"
+            ],
+            "what_went_wrong": [
+              "S4 完成後 sdd_context 未同步更新，導致 S5 啟動時需手動修正"
+            ],
+            "new_pitfalls": [
+              "S4 完成所有 Task commit 後，必須同步更新 sdd_context.json 的 s4 output（completed_tasks, waves_completed），否則後續 Stage 無法正確恢復"
+            ]
+          }
         }
       }
     }

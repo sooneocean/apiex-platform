@@ -45,3 +45,5 @@
   — webhook-notify (2026-03)
 - fire-and-forget 通知不能阻塞 proxy 請求 — 永遠用 .catch(console.error)
   — webhook-notify (2026-03)
+- S4 完成所有 Task commit 後，必須同步更新 sdd_context.json 的 s4 output，否則後續 Stage 無法正確恢復
+  — webhook-notify-v2 (2026-03)
