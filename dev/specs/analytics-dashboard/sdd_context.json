@@ -2,15 +2,15 @@
   "sdd_context": {
     "version": "2.8.0",
     "feature": "analytics-dashboard",
-    "current_stage": "S7",
+    "current_stage": "S4",
     "spec_mode": "full",
     "spec_mode_reason": "涉及前端多頁面（用戶 Dashboard + Admin Dashboard + 費率設定）+ 新後端 API 層 + 新 DB 表（model_rates）+ 圖表庫引入，複雜度中高，需完整 spec 文件",
     "work_type": "new_feature",
     "spec_folder": "dev/specs/analytics-dashboard",
     "execution_mode": "autopilot",
-    "status": "completed",
+    "status": "in_progress",
     "started_at": "2026-03-15T15:00:00+08:00",
-    "last_updated": "2026-03-15T16:30:00+08:00",
+    "last_updated": "2026-03-15T18:30:00+08:00",
     "last_updated_by": "architect",
     "stages": {
       "s0": {
@@ -103,105 +103,108 @@
           "completed_phases": [1, 2],
           "dev_spec_path": "dev/specs/analytics-dashboard/s1_dev_spec.md",
           "api_spec_path": "dev/specs/analytics-dashboard/s1_api_spec.md",
-          "solution_summary": "Hono routes（/analytics/* + /admin/analytics/* + /admin/rates） + AggregationService（即時 SQL DATE_TRUNC + PERCENTILE_CONT） + RatesService（model_rates CRUD） + Recharts 圖表元件 + middleware role-based routing（GET /auth/me + ADMIN_EMAILS）",
+          "frontend_handoff_path": "dev/specs/analytics-dashboard/s1_frontend_handoff.md",
+          "solution_summary": "新增 12 個 API endpoints（4 用戶 analytics + 4 admin analytics + 3 rates CRUD + /auth/me），核心聚合邏輯封裝為 8 個 Supabase RPC functions。圖表庫採用 Recharts（直接使用，非 shadcn/ui charts）。Admin 角色偵測沿用 ADMIN_EMAILS，前端 AuthContext client-side 呼叫 GET /auth/me。",
           "tasks": [
-            { "id": 1, "name": "DB migration: model_rates + usage_logs index + types", "type": "db", "agent": "db-expert", "complexity": "S" },
-            { "id": 2, "name": "GET /auth/me endpoint", "type": "backend", "agent": "backend-expert", "complexity": "S" },
-            { "id": 3, "name": "RatesService CRUD", "type": "backend", "agent": "backend-expert", "complexity": "S" },
-            { "id": 4, "name": "AggregationService: timeseries + model-breakdown", "type": "backend", "agent": "backend-expert", "complexity": "M" },
-            { "id": 5, "name": "AggregationService: latency percentile", "type": "backend", "agent": "backend-expert", "complexity": "M" },
-            { "id": 6, "name": "AggregationService: billing + overview + top-users", "type": "backend", "agent": "backend-expert", "complexity": "L" },
-            { "id": 7, "name": "User analytics routes (/analytics/*)", "type": "backend", "agent": "backend-expert", "complexity": "M" },
-            { "id": 8, "name": "Admin analytics + rates routes", "type": "backend", "agent": "backend-expert", "complexity": "M" },
-            { "id": 9, "name": "Install recharts + frontend API layer", "type": "frontend", "agent": "frontend-expert", "complexity": "S" },
-            { "id": 10, "name": "Shared UI components (StatsCard, PeriodSelector, KeySelector, EmptyState, LoadingSkeleton)", "type": "frontend", "agent": "frontend-expert", "complexity": "M" },
-            { "id": 11, "name": "Chart components (TimeseriesAreaChart, LatencyLineChart, DonutChart)", "type": "frontend", "agent": "frontend-expert", "complexity": "M" },
-            { "id": 12, "name": "Middleware role-based routing", "type": "frontend", "agent": "frontend-expert", "complexity": "M" },
-            { "id": 13, "name": "User Dashboard page (/portal/dashboard) + portal layout", "type": "frontend", "agent": "frontend-expert", "complexity": "L" },
-            { "id": 14, "name": "Admin Analytics page + AppLayout", "type": "frontend", "agent": "frontend-expert", "complexity": "L" },
-            { "id": 15, "name": "Admin Rates Settings page", "type": "frontend", "agent": "frontend-expert", "complexity": "M" },
-            { "id": 16, "name": "Integration testing + acceptance", "type": "test", "agent": "test-engineer", "complexity": "M" }
+            { "id": "T01", "name": "DB Migration（model_rates + topup_logs IF NOT EXISTS + indexes + 8 RPC functions）", "type": "database", "agent": "backend-developer", "complexity": "M", "dependencies": [] },
+            { "id": "T02", "name": "GET /auth/me endpoint", "type": "backend", "agent": "backend-developer", "complexity": "S", "dependencies": [] },
+            { "id": "T03", "name": "RatesService CRUD（含 created_by）", "type": "backend", "agent": "backend-developer", "complexity": "S", "dependencies": ["T01"] },
+            { "id": "T04", "name": "AggregationService: timeseries + model-breakdown（RPC）", "type": "backend", "agent": "backend-developer", "complexity": "M", "dependencies": ["T01"] },
+            { "id": "T05", "name": "AggregationService: latency percentile（RPC）", "type": "backend", "agent": "backend-developer", "complexity": "M", "dependencies": ["T01"] },
+            { "id": "T06", "name": "AggregationService: billing + overview + top-users + admin timeseries（RPC）", "type": "backend", "agent": "backend-developer", "complexity": "L", "dependencies": ["T01", "T03"] },
+            { "id": "T07", "name": "User analytics routes (/analytics/*)", "type": "backend", "agent": "backend-developer", "complexity": "M", "dependencies": ["T04", "T05", "T06"] },
+            { "id": "T08", "name": "Admin analytics + rates routes（含 /admin/analytics/timeseries）", "type": "backend", "agent": "backend-developer", "complexity": "M", "dependencies": ["T03", "T04", "T05", "T06"] },
+            { "id": "T09", "name": "Install Recharts + frontend API layer + AbortSignal（GET only）", "type": "frontend", "agent": "frontend-developer", "complexity": "S", "dependencies": [] },
+            { "id": "T10", "name": "Shared UI components", "type": "frontend", "agent": "frontend-developer", "complexity": "M", "dependencies": ["T09"] },
+            { "id": "T11", "name": "Chart components (Recharts)", "type": "frontend", "agent": "frontend-developer", "complexity": "M", "dependencies": ["T09"] },
+            { "id": "T12", "name": "AuthContext（GET /auth/me）+ role-based routing（client-side）", "type": "frontend", "agent": "frontend-developer", "complexity": "M", "dependencies": ["T02"] },
+            { "id": "T13", "name": "User Dashboard page (/portal/dashboard) + portal layout", "type": "frontend", "agent": "frontend-developer", "complexity": "L", "dependencies": ["T07", "T10", "T11", "T12"] },
+            { "id": "T14", "name": "Admin Analytics page + AppLayout", "type": "frontend", "agent": "frontend-developer", "complexity": "L", "dependencies": ["T08", "T10", "T11"] },
+            { "id": "T15", "name": "Admin Rates Settings page", "type": "frontend", "agent": "frontend-developer", "complexity": "M", "dependencies": ["T08", "T10"] },
+            { "id": "T16", "name": "Integration testing + acceptance（12 endpoints）", "type": "test", "agent": "test-engineer", "complexity": "M", "dependencies": ["T13", "T14", "T15"] }
           ],
           "acceptance_criteria": [
-            "用戶 7d 用量 AreaChart",
-            "24h/7d/30d 粒度自動",
-            "per-key 篩選",
-            "延遲 p50/p95/p99",
-            "帳單費用 USD / N/A",
-            "Admin 延遲 6 條線",
-            "費率 CRUD + 歷史費率",
-            "Top 10 排行含費用",
-            "新用戶空狀態",
-            "30d < 3s",
-            "Skeleton loading",
-            "快速切換無閃爍",
-            "角色分流",
-            "Admin 全平台概況",
-            "回歸不受影響"
+            "AC-1: 用戶 7d 用量 AreaChart",
+            "AC-2: 24h/7d/30d 粒度自動",
+            "AC-3: per-key 篩選",
+            "AC-4: 延遲 p50/p95/p99",
+            "AC-5: 帳單費用 USD / N/A",
+            "AC-6: Admin 延遲 6 條線",
+            "AC-7: 費率 CRUD + 歷史費率",
+            "AC-8: Top 10 排行含費用",
+            "AC-9: 新用戶空狀態",
+            "AC-10: 30d < 3s",
+            "AC-11: Skeleton loading",
+            "AC-12: 快速切換無閃爍",
+            "AC-13: 角色分流",
+            "AC-14: Admin 全平台概況",
+            "AC-15: 回歸不受影響",
+            "AC-16: model-breakdown percentage 正確性",
+            "AC-17: Admin 全平台 token 趨勢圖"
           ],
           "assumptions": [
-            "topup_logs migration 存在（004_topup_logs.sql 已驗證）",
+            "topup_logs 表已存在於 Supabase 雲端（migration 不存在，本次補 IF NOT EXISTS）",
+            "usage_logs 無 user_id（已驗證），per-user 透過 JOIN api_keys",
             "ADMIN_EMAILS 機制足夠",
             "Recharts 與 React 19 相容",
-            "usage_logs 無 user_id（已驗證）"
+            "topup_logs.amount_usd 為 INTEGER（美分），帳單顯示需除以 100"
           ],
           "tech_debt": [
             "topup_logs.amount_usd 為 INTEGER（美分）非 NUMERIC",
-            "middleware.ts 缺 role check（本次解決）",
             "database.types.ts 手動維護",
+            "navItems hardcoded",
             "usage_logs 缺 user_id，聚合需 JOIN"
           ],
           "regression_risks": [
-            "middleware.ts auth guard",
             "admin.ts route order",
-            "AppLayout navItems"
+            "AppLayout navItems",
+            "index.ts 路由群影響 404 catch-all"
           ],
           "risks": [
-            { "risk": "usage_logs 無 user_id JOIN 效能", "level": "high", "mitigation": "composite index + 10s timeout" },
-            { "risk": "PERCENTILE_CONT 慢查詢", "level": "high", "mitigation": "index + timeout + 前端提示" },
-            { "risk": "middleware.ts 修改回歸", "level": "high", "mitigation": "/auth/me 失敗降級" },
+            { "risk": "usage_logs 無 user_id JOIN 效能", "level": "high", "mitigation": "composite index + RPC 10s timeout" },
+            { "risk": "PERCENTILE_CONT 慢查詢", "level": "high", "mitigation": "index + RPC timeout + 前端提示" },
+            { "risk": "AuthContext /auth/me 失敗", "level": "low", "mitigation": "降級為非 Admin" },
             { "risk": "Recharts bundle size", "level": "medium", "mitigation": "dynamic import" }
           ],
           "unknowns_resolved": {
-            "U1": "topup_logs migration 存在（004_topup_logs.sql）",
-            "U2": "沿用 ADMIN_EMAILS + GET /auth/me",
-            "U3": "選用 Recharts（Tremor 不支援 Tailwind v4）",
-            "U4": "SUM(api_keys.quota_tokens) WHERE active",
+            "U1": "migration 不存在（無 004_topup_logs.sql），以 IF NOT EXISTS 補建",
+            "U2": "沿用 ADMIN_EMAILS，前端 AuthContext client-side 呼叫 GET /auth/me 取得 isAdmin",
+            "U3": "選用 Recharts（直接使用，非 shadcn/ui charts），Tremor 不支援 Tailwind v4",
+            "U4": "SUM(api_keys.quota_tokens) WHERE active AND quota_tokens != -1",
             "U5": "/portal/dashboard"
           },
           "impact_scope": {
             "backend": [
+              { "file": "packages/api-server/supabase/migrations/20260315000000_analytics.sql", "type": "new", "impact": "high", "description": "model_rates + topup_logs IF NOT EXISTS + indexes + 8 RPC functions" },
               { "file": "packages/api-server/src/routes/analytics.ts", "type": "new", "impact": "high" },
-              { "file": "packages/api-server/src/routes/admin.ts", "type": "modified", "impact": "medium" },
+              { "file": "packages/api-server/src/routes/admin.ts", "type": "modified", "impact": "medium", "description": "7 endpoints（4 admin analytics incl. timeseries + 3 rates）" },
               { "file": "packages/api-server/src/routes/auth.ts", "type": "modified", "impact": "low" },
-              { "file": "packages/api-server/src/services/AggregationService.ts", "type": "new", "impact": "high" },
-              { "file": "packages/api-server/src/services/RatesService.ts", "type": "new", "impact": "medium" },
+              { "file": "packages/api-server/src/services/AggregationService.ts", "type": "new", "impact": "high", "description": "RPC 呼叫封裝（supabaseAdmin.rpc()）" },
+              { "file": "packages/api-server/src/services/RatesService.ts", "type": "new", "impact": "medium", "description": "CRUD 含 created_by" },
               { "file": "packages/api-server/src/index.ts", "type": "modified", "impact": "low" },
               { "file": "packages/api-server/src/lib/database.types.ts", "type": "modified", "impact": "low" },
               { "file": "packages/api-server/src/lib/isAdmin.ts", "type": "new", "impact": "low" }
             ],
             "frontend": [
               { "file": "packages/web-admin/src/app/portal/dashboard/page.tsx", "type": "new", "impact": "high" },
+              { "file": "packages/web-admin/src/app/portal/billing/page.tsx", "type": "new", "impact": "medium" },
               { "file": "packages/web-admin/src/app/admin/(protected)/analytics/page.tsx", "type": "new", "impact": "high" },
               { "file": "packages/web-admin/src/app/admin/(protected)/settings/rates/page.tsx", "type": "new", "impact": "medium" },
-              { "file": "packages/web-admin/src/middleware.ts", "type": "modified", "impact": "high" },
-              { "file": "packages/web-admin/src/lib/api.ts", "type": "modified", "impact": "medium" },
-              { "file": "packages/web-admin/src/components/charts/TimeseriesAreaChart.tsx", "type": "new", "impact": "high" },
-              { "file": "packages/web-admin/src/components/charts/LatencyLineChart.tsx", "type": "new", "impact": "high" },
-              { "file": "packages/web-admin/src/components/charts/DonutChart.tsx", "type": "new", "impact": "medium" },
-              { "file": "packages/web-admin/src/components/analytics/StatsCard.tsx", "type": "new", "impact": "low" },
-              { "file": "packages/web-admin/src/components/analytics/PeriodSelector.tsx", "type": "new", "impact": "low" },
-              { "file": "packages/web-admin/src/components/analytics/KeySelector.tsx", "type": "new", "impact": "low" },
-              { "file": "packages/web-admin/src/components/analytics/EmptyState.tsx", "type": "new", "impact": "low" },
-              { "file": "packages/web-admin/src/components/analytics/LoadingSkeleton.tsx", "type": "new", "impact": "low" },
-              { "file": "packages/web-admin/src/components/AppLayout.tsx", "type": "modified", "impact": "medium" },
-              { "file": "packages/web-admin/src/app/portal/layout.tsx", "type": "modified", "impact": "medium" },
+              { "file": "packages/web-admin/src/contexts/AuthContext.tsx", "type": "new", "impact": "high", "description": "角色偵測（GET /auth/me）" },
+              { "file": "packages/web-admin/src/middleware.ts", "type": "modified", "impact": "low", "description": "維持現有行為，不新增 server-side role check" },
+              { "file": "packages/web-admin/src/lib/api.ts", "type": "modified", "impact": "medium", "description": "3 API client factories + apiGet AbortSignal" },
+              { "file": "packages/web-admin/src/components/charts/*.tsx", "type": "new", "impact": "high" },
+              { "file": "packages/web-admin/src/components/analytics/*.tsx", "type": "new", "impact": "medium" },
+              { "file": "packages/web-admin/src/components/AppLayout.tsx", "type": "modified", "impact": "low" },
+              { "file": "packages/web-admin/src/app/portal/layout.tsx", "type": "modified", "impact": "low" },
               { "file": "packages/web-admin/package.json", "type": "modified", "impact": "medium" }
             ],
             "database": [
-              { "table": "model_rates", "type": "new", "impact": "high" },
+              { "table": "model_rates", "type": "new", "impact": "high", "description": "含 created_by UUID" },
+              { "table": "topup_logs", "type": "migration", "impact": "medium", "description": "IF NOT EXISTS 補建" },
               { "index": "idx_usage_logs_api_key_created", "type": "new", "impact": "high" },
-              { "index": "idx_model_rates_tag_effective", "type": "new", "impact": "medium" }
+              { "index": "idx_model_rates_tag_effective", "type": "new", "impact": "medium" },
+              { "rpc": "8 RPC functions", "type": "new", "impact": "high", "description": "analytics_timeseries, analytics_model_breakdown, analytics_latency_percentile, analytics_billing_summary, analytics_platform_overview, analytics_platform_timeseries, analytics_top_users, analytics_platform_latency" }
             ]
           },
           "dependencies": {
@@ -215,36 +218,114 @@
             "internal": [
               "FA-D4 -> FA-D3: model_rates 先建，費用換算才能運作",
               "FA-D3 -> FA-D1/D2: 前端依賴 API",
-              "GET /auth/me -> middleware role routing"
+              "GET /auth/me -> AuthContext role detection"
             ]
           }
         }
       },
       "s2": {
-        "status": "skipped",
-        "skip_reason": "Autopilot mode -- S2 spec review skipped per autopilot gate policy"
+        "status": "completed",
+        "agent": "architect",
+        "started_at": "2026-03-15T17:30:00+08:00",
+        "completed_at": "2026-03-15T18:00:00+08:00",
+        "output": {
+          "conclusion": "conditional_pass",
+          "review_type": "single_engine",
+          "r1_findings_path": "dev/specs/analytics-dashboard/review/r1_findings.md",
+          "findings_summary": {
+            "p0": 3,
+            "p1": 9,
+            "p2": 7
+          },
+          "p0_fixes": [
+            "SR-1: 驗證後 dev_spec 路徑已與 api_spec 一致（短路徑），修正 frontend_handoff 統一為 api_spec 短路徑",
+            "SR-2: dev_spec 補上 GET /admin/analytics/timeseries，endpoint 總數 12，Task #6/#8 更新",
+            "SR-3: model_rates CREATE TABLE 加入 created_by UUID，TypeScript interface 加入，Task #3 createRate 接收 adminId"
+          ],
+          "p1_fixes": [
+            "SR-4: endpoint 計數統一為 12（含 /auth/me）",
+            "SR-5: Task #8 DoD 加入 /admin/analytics/timeseries",
+            "SR-7: 統一為 AuthContext client-side GET /auth/me（非 middleware server-side、非 probe /admin/users）",
+            "SR-8: U1 裁決修正為 migration 不存在，Task #1 加入 topup_logs IF NOT EXISTS",
+            "SR-13: AggregationService 明確透過 supabaseAdmin.rpc() 呼叫，Task #1 加入 8 個 RPC function 定義"
+          ],
+          "reviewer_note": "R1 findings SR-1 誤判 api_spec 路徑方向（api_spec 實為短路徑，frontend_handoff 才是長路徑）。SR-2 中 api_spec 使用 top-users（非 users/ranking），維持 api_spec 權威路徑。"
+        }
       },
       "s3": {
         "status": "completed",
         "agent": "architect",
-        "started_at": "2026-03-15T16:30:00+08:00",
-        "completed_at": "2026-03-15T16:30:00+08:00",
+        "started_at": "2026-03-15T18:00:00+08:00",
+        "completed_at": "2026-03-15T18:30:00+08:00",
         "output": {
           "implementation_plan_path": "dev/specs/analytics-dashboard/s3_implementation_plan.md",
           "waves": [
-            { "wave": 1, "name": "基礎設施", "tasks": [1, 2, 9], "parallel": true },
-            { "wave": 2, "name": "後端服務 + 前端元件", "tasks": [3, 4, 5, 10, 11, 12], "parallel": true },
-            { "wave": 3, "name": "後端聚合（billing/overview）", "tasks": [6], "parallel": false },
-            { "wave": 4, "name": "後端路由", "tasks": [7, 8], "parallel": true },
-            { "wave": 5, "name": "前端頁面", "tasks": [13, 14, 15], "parallel": false },
-            { "wave": 6, "name": "驗收", "tasks": [16], "parallel": false }
+            {
+              "wave": 1,
+              "name": "Foundation",
+              "tasks": [
+                { "id": "T01", "name": "DB Migration", "agent": "backend-developer", "dependencies": [], "complexity": "M", "parallel": true },
+                { "id": "T02", "name": "GET /auth/me", "agent": "backend-developer", "dependencies": [], "complexity": "S", "parallel": true },
+                { "id": "T09", "name": "Recharts + API Layer", "agent": "frontend-developer", "dependencies": [], "complexity": "S", "parallel": true }
+              ]
+            },
+            {
+              "wave": 2,
+              "name": "Core Services + UI Components",
+              "tasks": [
+                { "id": "T03", "name": "RatesService", "agent": "backend-developer", "dependencies": ["T01"], "complexity": "S", "parallel": true },
+                { "id": "T04", "name": "AggSvc timeseries+model-breakdown", "agent": "backend-developer", "dependencies": ["T01"], "complexity": "M", "parallel": true },
+                { "id": "T05", "name": "AggSvc latency", "agent": "backend-developer", "dependencies": ["T01"], "complexity": "M", "parallel": true },
+                { "id": "T10", "name": "Shared UI", "agent": "frontend-developer", "dependencies": ["T09"], "complexity": "M", "parallel": true },
+                { "id": "T11", "name": "Chart Components", "agent": "frontend-developer", "dependencies": ["T09"], "complexity": "M", "parallel": true },
+                { "id": "T12", "name": "AuthContext", "agent": "frontend-developer", "dependencies": ["T02"], "complexity": "M", "parallel": true }
+              ]
+            },
+            {
+              "wave": 3,
+              "name": "Billing & Overview Service",
+              "tasks": [
+                { "id": "T06", "name": "AggSvc billing+overview+top-users+admin-ts", "agent": "backend-developer", "dependencies": ["T01", "T03"], "complexity": "L", "parallel": false }
+              ]
+            },
+            {
+              "wave": 4,
+              "name": "API Routes",
+              "tasks": [
+                { "id": "T07", "name": "User analytics routes", "agent": "backend-developer", "dependencies": ["T04", "T05", "T06"], "complexity": "M", "parallel": true },
+                { "id": "T08", "name": "Admin routes (7 endpoints)", "agent": "backend-developer", "dependencies": ["T03", "T04", "T05", "T06"], "complexity": "M", "parallel": true }
+              ]
+            },
+            {
+              "wave": 5,
+              "name": "Frontend Pages",
+              "tasks": [
+                { "id": "T13", "name": "User Dashboard", "agent": "frontend-developer", "dependencies": ["T07", "T10", "T11", "T12"], "complexity": "L", "parallel": true },
+                { "id": "T14", "name": "Admin Analytics", "agent": "frontend-developer", "dependencies": ["T08", "T10", "T11"], "complexity": "L", "parallel": true },
+                { "id": "T15", "name": "Admin Rates", "agent": "frontend-developer", "dependencies": ["T08", "T10"], "complexity": "M", "parallel": true }
+              ]
+            },
+            {
+              "wave": 6,
+              "name": "Integration & Acceptance",
+              "tasks": [
+                { "id": "T16", "name": "Integration Test", "agent": "test-engineer", "dependencies": ["T13", "T14", "T15"], "complexity": "M", "parallel": false }
+              ]
+            }
           ],
           "total_tasks": 16,
           "estimated_waves": 6,
           "verification": {
-            "static_analysis": ["cd packages/api-server && npx tsc --noEmit", "cd packages/web-admin && npx tsc --noEmit"],
-            "unit_tests": ["cd packages/api-server && npx vitest run"],
-            "build": ["cd packages/web-admin && npm run build"]
+            "static_analysis": [
+              "cd /Users/asd/demo/1/packages/api-server && npx tsc --noEmit",
+              "cd /Users/asd/demo/1/packages/web-admin && npx tsc --noEmit"
+            ],
+            "unit_tests": [
+              "cd /Users/asd/demo/1/packages/api-server && npx vitest run"
+            ],
+            "build": [
+              "cd /Users/asd/demo/1/packages/web-admin && npm run build"
+            ]
           }
         }
       },
