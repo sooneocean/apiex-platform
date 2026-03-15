@@ -43,6 +43,13 @@ export default function ApiKeyCard({ apiKey, onRevoke }: ApiKeyCardProps) {
   if (isOverLimit) spendColor = 'text-red-600 font-semibold'
   else if (isWarning) spendColor = 'text-amber-600 font-semibold'
 
+  // Expiration status
+  const expiresAt = apiKey.expires_at ? new Date(apiKey.expires_at) : null
+  const now = new Date()
+  const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+  const isExpired = expiresAt !== null && expiresAt <= now
+  const isExpiringSoon = expiresAt !== null && !isExpired && expiresAt <= sevenDaysLater
+
   return (
     <>
       <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-4 py-3 shadow-sm">
@@ -62,6 +69,24 @@ export default function ApiKeyCard({ apiKey, onRevoke }: ApiKeyCardProps) {
             <span className="text-xs text-gray-400">
               {new Date(apiKey.created_at).toLocaleDateString('zh-TW')}
             </span>
+            {/* Expiration badge */}
+            {expiresAt === null ? (
+              <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-500">
+                永久
+              </span>
+            ) : isExpired ? (
+              <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700">
+                已過期
+              </span>
+            ) : isExpiringSoon ? (
+              <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-700">
+                即將過期・{expiresAt.toLocaleDateString('zh-TW')}
+              </span>
+            ) : (
+              <span className="text-xs text-gray-400">
+                到期：{expiresAt.toLocaleDateString('zh-TW')}
+              </span>
+            )}
           </div>
           {/* Spend display */}
           <div className={`text-xs mt-1 ${spendColor}`}>

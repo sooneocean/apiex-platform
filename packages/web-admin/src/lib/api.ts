@@ -35,6 +35,7 @@ export interface ApiKey {
   spend_limit_usd: number;
   spent_usd: number;
   created_at: string;
+  expires_at: string | null;
 }
 
 export interface UsageLogsQuery {
@@ -224,8 +225,12 @@ export function makeTopupApi(token: string) {
 export function makeKeysApi(token: string) {
   return {
     list: () => apiGet<ApiKeysResponse>("/keys", token),
-    create: (name: string, spendLimitUsd?: number) =>
-      apiPost<CreateKeyResponse>("/keys", { name, ...(spendLimitUsd !== undefined ? { spend_limit_usd: spendLimitUsd } : {}) }, token),
+    create: (name: string, spendLimitUsd?: number, expiresAt?: string) =>
+      apiPost<CreateKeyResponse>("/keys", {
+        name,
+        ...(spendLimitUsd !== undefined ? { spend_limit_usd: spendLimitUsd } : {}),
+        ...(expiresAt ? { expires_at: expiresAt } : {}),
+      }, token),
     revoke: (id: string) => apiDelete<{ success: boolean }>(`/keys/${id}`, token),
     updateSpendLimit: (id: string, spendLimitUsd: number) =>
       apiPatch<{ data: { id: string; spend_limit_usd: number } }>(`/keys/${id}`, { spend_limit_usd: spendLimitUsd }, token),

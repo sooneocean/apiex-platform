@@ -6,7 +6,7 @@ import CopyableTextField from './CopyableTextField'
 
 interface ApiKeyCreateModalProps {
   open: boolean
-  onCreate: (name: string, spendLimitUsd?: number) => Promise<{ key: string }>
+  onCreate: (name: string, spendLimitUsd?: number, expiresAt?: string) => Promise<{ key: string }>
   onClose: () => void
 }
 
@@ -17,6 +17,7 @@ export default function ApiKeyCreateModal({
 }: ApiKeyCreateModalProps) {
   const [name, setName] = useState('')
   const [spendLimitInput, setSpendLimitInput] = useState('')
+  const [expiresAtInput, setExpiresAtInput] = useState('')
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [newKey, setNewKey] = useState<string | null>(null)
@@ -40,7 +41,23 @@ export default function ApiKeyCreateModal({
         }
         spendLimitUsd = Math.round(dollars * 100)
       }
-      const result = await onCreate(name.trim(), spendLimitUsd)
+      // Parse expires_at: empty = no expiry, otherwise convert local datetime to ISO string
+      let expiresAt: string | undefined
+      if (expiresAtInput.trim() !== '') {
+        const parsed = new Date(expiresAtInput)
+        if (isNaN(parsed.getTime())) {
+          setError('過期時間格式錯誤')
+          setCreating(false)
+          return
+        }
+        if (parsed <= new Date()) {
+          setError('過期時間必須在未來')
+          setCreating(false)
+          return
+        }
+        expiresAt = parsed.toISOString()
+      }
+      const result = await onCreate(name.trim(), spendLimitUsd, expiresAt)
       setNewKey(result.key)
     } catch (err) {
       setError(err instanceof Error ? err.message : '建立失敗')
@@ -52,6 +69,7 @@ export default function ApiKeyCreateModal({
   function handleClose() {
     setName('')
     setSpendLimitInput('')
+    setExpiresAtInput('')
     setError(null)
     setNewKey(null)
     onClose()
@@ -135,6 +153,25 @@ export default function ApiKeyCreateModal({
                 />
                 <p className="mt-1 text-xs text-gray-400">
                   設定此 Key 的最大花費上限。留空表示無限制。
+                </p>
+              </div>
+              <div>
+                <label
+                  htmlFor="expires-at"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  過期時間（可選）
+                </label>
+                <input
+                  id="expires-at"
+                  type="datetime-local"
+                  value={expiresAtInput}
+                  onChange={(e) => setExpiresAtInput(e.target.value)}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+                  disabled={creating}
+                />
+                <p className="mt-1 text-xs text-gray-400">
+                  留空表示永不過期。
                 </p>
               </div>
               {error && <p className="text-sm text-red-500">{error}</p>}

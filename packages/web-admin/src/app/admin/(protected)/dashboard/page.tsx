@@ -92,10 +92,10 @@ export default function DashboardPage() {
     )
   }
 
-  async function handleCreateKey(name: string): Promise<{ key: string }> {
+  async function handleCreateKey(name: string, spendLimitUsd?: number, expiresAt?: string): Promise<{ key: string }> {
     const token = await getToken()
     const keysApi = makeKeysApi(token)
-    const response = await keysApi.create(name)
+    const response = await keysApi.create(name, spendLimitUsd, expiresAt)
     await fetchKeys()
     return { key: response.data.key }
   }
