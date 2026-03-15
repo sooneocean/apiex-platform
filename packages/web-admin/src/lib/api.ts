@@ -477,3 +477,31 @@ export function makeModelsApi(token: string) {
       apiPatch<{ data: RouteConfig }>(`/admin/models/${id}`, data, token, signal),
   };
 }
+
+// ─── Routes API Factory (FA-E) ────────────────────────────────────────────────
+
+export interface RouteToggleResponse {
+  data: RouteConfig;
+  warning?: "last_active_route";
+}
+
+export function makeRoutesApi(getToken: () => Promise<string>) {
+  return {
+    list: async (signal?: AbortSignal) => {
+      const token = await getToken();
+      return apiGet<{ data: RouteConfig[] }>("/admin/routes", token, signal);
+    },
+    create: async (data: RouteConfigCreate, signal?: AbortSignal) => {
+      const token = await getToken();
+      return apiPost<{ data: RouteConfig }>("/admin/routes", data, token, signal);
+    },
+    update: async (id: string, data: Partial<RouteConfigCreate>, signal?: AbortSignal) => {
+      const token = await getToken();
+      return apiPatch<{ data: RouteConfig }>(`/admin/routes/${id}`, data, token, signal);
+    },
+    toggle: async (id: string, signal?: AbortSignal) => {
+      const token = await getToken();
+      return apiPatch<RouteToggleResponse>(`/admin/routes/${id}/toggle`, {}, token, signal);
+    },
+  };
+}

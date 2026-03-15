@@ -15,6 +15,7 @@ const navItems = [
   { href: '/admin/topup-logs', label: 'Topup Logs' },
   { href: '/admin/settings/rates', label: 'Settings: Rates' },
   { href: '/admin/settings/models', label: 'Settings: Models' },
+  { href: '/admin/settings/routes', label: 'Settings: Routes' },
 ]
 
 export default function AppLayout({ children }: AppLayoutProps) {
