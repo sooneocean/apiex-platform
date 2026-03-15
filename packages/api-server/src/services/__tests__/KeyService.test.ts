@@ -530,4 +530,64 @@ describe('KeyService', () => {
       )
     })
   })
+
+  // ────────────────────────────────────────────────────────────────
+  // Test 10: resetSpend
+  // ────────────────────────────────────────────────────────────────
+  describe('resetSpend', () => {
+    it('should call reset_spend RPC with correct key id', async () => {
+      const rpcMock = supabaseAdmin.rpc as ReturnType<typeof vi.fn>
+      rpcMock.mockResolvedValueOnce({ data: null, error: null })
+
+      await service.resetSpend('key-123')
+
+      expect(rpcMock).toHaveBeenCalledWith('reset_spend', {
+        p_key_id: 'key-123',
+      })
+    })
+
+    it('should throw when RPC returns error', async () => {
+      const rpcMock = supabaseAdmin.rpc as ReturnType<typeof vi.fn>
+      rpcMock.mockResolvedValueOnce({ data: null, error: { message: 'DB error' } })
+
+      await expect(service.resetSpend('key-123')).rejects.toThrow('Failed to reset spend')
+    })
+  })
+
+  // ────────────────────────────────────────────────────────────────
+  // Test 11: updateSpendLimit
+  // ────────────────────────────────────────────────────────────────
+  describe('updateSpendLimit', () => {
+    it('should update spend_limit_usd for the correct user and key', async () => {
+      const fromMock = supabaseAdmin.from as ReturnType<typeof vi.fn>
+      // eq is chained: .eq('id', ...).eq('user_id', ...) — last eq resolves
+      const resolved = Promise.resolve({ data: null, error: null })
+      const updateChain = {
+        update: vi.fn().mockReturnThis(),
+        eq: vi.fn()
+          .mockReturnValueOnce({ eq: vi.fn().mockReturnValue(resolved) })
+          .mockReturnValue(resolved),
+      }
+      fromMock.mockReturnValueOnce(updateChain)
+
+      await service.updateSpendLimit('user-abc', 'key-123', 5000)
+
+      expect(updateChain.update).toHaveBeenCalledWith({ spend_limit_usd: 5000 })
+      expect(updateChain.eq).toHaveBeenCalledWith('id', 'key-123')
+    })
+
+    it('should throw when DB returns error', async () => {
+      const fromMock = supabaseAdmin.from as ReturnType<typeof vi.fn>
+      const resolved = Promise.resolve({ data: null, error: { message: 'Update failed' } })
+      const updateChain = {
+        update: vi.fn().mockReturnThis(),
+        eq: vi.fn()
+          .mockReturnValueOnce({ eq: vi.fn().mockReturnValue(resolved) })
+          .mockReturnValue(resolved),
+      }
+      fromMock.mockReturnValueOnce(updateChain)
+
+      await expect(service.updateSpendLimit('user-abc', 'key-123', 1000)).rejects.toThrow('Failed to update spend limit')
+    })
+  })
 })

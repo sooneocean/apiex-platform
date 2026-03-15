@@ -10,6 +10,7 @@ const mockCreateKey = vi.fn()
 const mockListKeys = vi.fn()
 const mockRevokeKey = vi.fn()
 const mockUpdateSpendLimit = vi.fn()
+const mockResetSpend = vi.fn()
 
 vi.mock('../../services/KeyService.js', () => {
   return {
@@ -18,6 +19,7 @@ vi.mock('../../services/KeyService.js', () => {
       listKeys(...args: unknown[]) { return mockListKeys(...args) }
       revokeKey(...args: unknown[]) { return mockRevokeKey(...args) }
       updateSpendLimit(...args: unknown[]) { return mockUpdateSpendLimit(...args) }
+      resetSpend(...args: unknown[]) { return mockResetSpend(...args) }
     },
   }
 })
@@ -201,43 +203,29 @@ describe('Keys Route — T11', () => {
     })
   })
 
-  describe('PATCH /keys/:id/spend-limit', () => {
+
+  describe('PATCH /keys/:id', () => {
     it('should_updateSpendLimit_successfully', async () => {
       mockUpdateSpendLimit.mockResolvedValue(undefined)
 
-      const res = await app.request('/keys/key-1/spend-limit', {
+      const res = await app.request('/keys/key-1', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ spend_limit_usd: 10000 }),
+        body: JSON.stringify({ spend_limit_usd: 1000 }),
       })
 
       expect(res.status).toBe(200)
       const body = await res.json()
       expect(body.data.id).toBe('key-1')
-      expect(body.data.spend_limit_usd).toBe(10000)
-      expect(mockUpdateSpendLimit).toHaveBeenCalledWith('user-uuid-test', 'key-1', 10000)
+      expect(body.data.spend_limit_usd).toBe(1000)
+      expect(mockUpdateSpendLimit).toHaveBeenCalledWith('user-uuid-test', 'key-1', 1000)
     })
 
-    it('should_updateSpendLimit_toUnlimited', async () => {
-      mockUpdateSpendLimit.mockResolvedValue(undefined)
-
-      const res = await app.request('/keys/key-1/spend-limit', {
+    it('should_return400_whenSpendLimitInvalid', async () => {
+      const res = await app.request('/keys/key-1', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ spend_limit_usd: -1 }),
-      })
-
-      expect(res.status).toBe(200)
-      const body = await res.json()
-      expect(body.data.spend_limit_usd).toBe(-1)
-      expect(mockUpdateSpendLimit).toHaveBeenCalledWith('user-uuid-test', 'key-1', -1)
-    })
-
-    it('should_return400_whenInvalidSpendLimit', async () => {
-      const res = await app.request('/keys/key-1/spend-limit', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ spend_limit_usd: -99 }),
+        body: JSON.stringify({ spend_limit_usd: -5 }),
       })
 
       expect(res.status).toBe(400)
@@ -245,8 +233,8 @@ describe('Keys Route — T11', () => {
       expect(body.error.code).toBe('invalid_parameter')
     })
 
-    it('should_return400_whenMissingSpendLimit', async () => {
-      const res = await app.request('/keys/key-1/spend-limit', {
+    it('should_return400_whenSpendLimitMissing', async () => {
+      const res = await app.request('/keys/key-1', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
@@ -258,13 +246,82 @@ describe('Keys Route — T11', () => {
     it('should_return404_whenKeyNotFound', async () => {
       mockUpdateSpendLimit.mockRejectedValue(new Error('Failed to update spend limit'))
 
-      const res = await app.request('/keys/nonexistent/spend-limit', {
+      const res = await app.request('/keys/key-999', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ spend_limit_usd: 5000 }),
+        body: JSON.stringify({ spend_limit_usd: 500 }),
       })
 
       expect(res.status).toBe(404)
+    })
+
+    it('should_allow_spendLimit_zero_fullBlock', async () => {
+      mockUpdateSpendLimit.mockResolvedValue(undefined)
+
+      const res = await app.request('/keys/key-1', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spend_limit_usd: 0 }),
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data.spend_limit_usd).toBe(0)
+    })
+
+    it('should_allow_spendLimit_negative_one_unlimited', async () => {
+      mockUpdateSpendLimit.mockResolvedValue(undefined)
+
+      const res = await app.request('/keys/key-1', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spend_limit_usd: -1 }),
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data.spend_limit_usd).toBe(-1)
+    })
+  })
+
+  describe('POST /keys/:id/reset-spend', () => {
+    it('should_resetSpend_whenKeyOwnedByUser', async () => {
+      mockListKeys.mockResolvedValue([
+        {
+          id: 'key-1',
+          prefix: 'apx-sk-ab',
+          name: 'my-key',
+          status: 'active',
+          quota_tokens: -1,
+          spend_limit_usd: 5000,
+          spent_usd: 3000,
+          created_at: '2026-03-14T00:00:00Z',
+        },
+      ])
+      mockResetSpend.mockResolvedValue(undefined)
+
+      const res = await app.request('/keys/key-1/reset-spend', {
+        method: 'POST',
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data.id).toBe('key-1')
+      expect(body.data.spent_usd).toBe(0)
+      expect(body.data.spend_limit_usd).toBe(5000)
+      expect(body.data.message).toBeDefined()
+      expect(mockResetSpend).toHaveBeenCalledWith('key-1')
+    })
+
+    it('should_return404_whenKeyNotOwnedByUser', async () => {
+      mockListKeys.mockResolvedValue([]) // User owns no keys
+
+      const res = await app.request('/keys/key-999/reset-spend', {
+        method: 'POST',
+      })
+
+      expect(res.status).toBe(404)
+      expect(mockResetSpend).not.toHaveBeenCalled()
     })
   })
 })

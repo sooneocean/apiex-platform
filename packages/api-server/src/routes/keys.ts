@@ -88,9 +88,10 @@ export function keysRoutes() {
   })
 
   /**
-   * PATCH /keys/:id/spend-limit — Update the spend limit for an API key
+   * PATCH /keys/:id — Update spend limit for an API key.
+   * Body: { spend_limit_usd: number }
    */
-  router.patch('/:id/spend-limit', async (c) => {
+  router.patch('/:id', async (c) => {
     const userId = c.get('userId') as string
     const keyId = c.req.param('id')
 
@@ -110,6 +111,36 @@ export function keysRoutes() {
       })
     } catch {
       return Errors.notFound()
+    }
+  })
+
+  /**
+   * POST /keys/:id/reset-spend — Reset the spend counter for an API key.
+   */
+  router.post('/:id/reset-spend', async (c) => {
+    const userId = c.get('userId') as string
+    const keyId = c.req.param('id')
+
+    // Verify the key belongs to this user before resetting
+    const keys = await keyService.listKeys(userId)
+    const ownedKey = keys.find((k) => k.id === keyId)
+
+    if (!ownedKey) {
+      return Errors.notFound()
+    }
+
+    try {
+      await keyService.resetSpend(keyId)
+      return c.json({
+        data: {
+          id: keyId,
+          spent_usd: 0,
+          spend_limit_usd: ownedKey.spend_limit_usd,
+          message: 'Spend counter reset successfully',
+        },
+      })
+    } catch {
+      return Errors.internalError()
     }
   })
 

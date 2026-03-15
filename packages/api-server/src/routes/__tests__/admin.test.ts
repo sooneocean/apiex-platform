@@ -15,8 +15,12 @@ vi.mock('../../lib/supabase.js', () => ({
   },
 }))
 
+const mockResetSpend = vi.fn()
+
 vi.mock('../../services/KeyService.js', () => ({
-  KeyService: vi.fn().mockImplementation(() => ({})),
+  KeyService: vi.fn().mockImplementation(() => ({
+    resetSpend: (...args: unknown[]) => mockResetSpend(...args),
+  })),
 }))
 
 // Helper: build a full Supabase chain stub ending in a resolved value
@@ -681,6 +685,198 @@ describe('Admin Routes — FA-E /admin/routes CRUD', () => {
       expect(res.status).toBe(403)
       const body = await res.json()
       expect(body.error.code).toBe('admin_required')
+    })
+  })
+})
+
+// =============================================================================
+// Spend Limit Admin Endpoints — T6
+// =============================================================================
+
+describe('Admin Spend Endpoints — T6', () => {
+  let app: Hono
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    app = new Hono()
+    app.use('/admin/*', async (c, next) => {
+      c.set('userId', 'admin-uuid')
+      c.set('user', { id: 'admin-uuid', email: 'admin@example.com' })
+      await next()
+    })
+    app.route('/admin', adminRoutes())
+  })
+
+  describe('GET /admin/keys/:id/spend', () => {
+    it('should return spend info for existing key', async () => {
+      const mockKey = {
+        id: 'key-uuid-1',
+        name: 'my-key',
+        prefix: 'apx-sk-ab',
+        user_id: 'user-uuid-1',
+        status: 'active',
+        spend_limit_usd: 5000,
+        spent_usd: 1234,
+      }
+
+      const chain = makeSupabaseChain({ data: mockKey, error: null })
+      mockFrom.mockReturnValueOnce(chain)
+
+      const res = await app.request('/admin/keys/key-uuid-1/spend')
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data.id).toBe('key-uuid-1')
+      expect(body.data.spend_limit_usd).toBe(5000)
+      expect(body.data.spent_usd).toBe(1234)
+      expect(body.data.key_prefix).toBe('apx-sk-ab')
+    })
+
+    it('should return 404 when key does not exist', async () => {
+      const chain = makeSupabaseChain({ data: null, error: { code: 'PGRST116', message: 'No rows found' } })
+      mockFrom.mockReturnValueOnce(chain)
+
+      const res = await app.request('/admin/keys/nonexistent/spend')
+      expect(res.status).toBe(404)
+    })
+  })
+
+  describe('PATCH /admin/keys/:id/spend-limit', () => {
+    it('should update spend_limit_usd successfully', async () => {
+      const existingKey = { id: 'key-uuid-1', spent_usd: 1000 }
+
+      // First call: fetch existing key
+      const fetchChain = makeSupabaseChain({ data: existingKey, error: null })
+      // Second call: update
+      const updateChain = {
+        update: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockResolvedValue({ data: null, error: null }),
+      }
+      mockFrom
+        .mockReturnValueOnce(fetchChain)
+        .mockReturnValueOnce(updateChain)
+
+      const res = await app.request('/admin/keys/key-uuid-1/spend-limit', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spend_limit_usd: 10000 }),
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data.spend_limit_usd).toBe(10000)
+      expect(body.data.spent_usd).toBe(1000)
+    })
+
+    it('should return 400 when spend_limit_usd is invalid (< -1)', async () => {
+      const res = await app.request('/admin/keys/key-uuid-1/spend-limit', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spend_limit_usd: -5 }),
+      })
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.error.code).toBe('invalid_parameter')
+    })
+
+    it('should return 400 when spend_limit_usd is missing', async () => {
+      const res = await app.request('/admin/keys/key-uuid-1/spend-limit', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+
+      expect(res.status).toBe(400)
+    })
+
+    it('should return 404 when key does not exist', async () => {
+      const fetchChain = makeSupabaseChain({ data: null, error: { code: 'PGRST116' } })
+      mockFrom.mockReturnValueOnce(fetchChain)
+
+      const res = await app.request('/admin/keys/nonexistent/spend-limit', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spend_limit_usd: 1000 }),
+      })
+
+      expect(res.status).toBe(404)
+    })
+
+    it('should allow spend_limit_usd = 0 (full block)', async () => {
+      const existingKey = { id: 'key-uuid-1', spent_usd: 0 }
+      const fetchChain = makeSupabaseChain({ data: existingKey, error: null })
+      const updateChain = {
+        update: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockResolvedValue({ data: null, error: null }),
+      }
+      mockFrom
+        .mockReturnValueOnce(fetchChain)
+        .mockReturnValueOnce(updateChain)
+
+      const res = await app.request('/admin/keys/key-uuid-1/spend-limit', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spend_limit_usd: 0 }),
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data.spend_limit_usd).toBe(0)
+    })
+
+    it('should allow spend_limit_usd = -1 (unlimited)', async () => {
+      const existingKey = { id: 'key-uuid-1', spent_usd: 500 }
+      const fetchChain = makeSupabaseChain({ data: existingKey, error: null })
+      const updateChain = {
+        update: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockResolvedValue({ data: null, error: null }),
+      }
+      mockFrom
+        .mockReturnValueOnce(fetchChain)
+        .mockReturnValueOnce(updateChain)
+
+      const res = await app.request('/admin/keys/key-uuid-1/spend-limit', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spend_limit_usd: -1 }),
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data.spend_limit_usd).toBe(-1)
+    })
+  })
+
+  describe('POST /admin/keys/:id/reset-spend', () => {
+    it('should reset spent_usd to 0 for existing key', async () => {
+      const existingKey = { id: 'key-uuid-1', spend_limit_usd: 5000 }
+      const fetchChain = makeSupabaseChain({ data: existingKey, error: null })
+      mockFrom.mockReturnValueOnce(fetchChain)
+      mockResetSpend.mockResolvedValue(undefined)
+
+      const res = await app.request('/admin/keys/key-uuid-1/reset-spend', {
+        method: 'POST',
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data.id).toBe('key-uuid-1')
+      expect(body.data.spent_usd).toBe(0)
+      expect(body.data.spend_limit_usd).toBe(5000)
+      expect(body.data.message).toBeDefined()
+      expect(mockResetSpend).toHaveBeenCalledWith('key-uuid-1')
+    })
+
+    it('should return 404 when key does not exist', async () => {
+      const fetchChain = makeSupabaseChain({ data: null, error: { code: 'PGRST116' } })
+      mockFrom.mockReturnValueOnce(fetchChain)
+
+      const res = await app.request('/admin/keys/nonexistent/reset-spend', {
+        method: 'POST',
+      })
+
+      expect(res.status).toBe(404)
+      expect(mockResetSpend).not.toHaveBeenCalled()
     })
   })
 })

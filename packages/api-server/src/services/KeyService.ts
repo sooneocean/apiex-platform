@@ -135,9 +135,6 @@ export class KeyService {
 
   /**
    * reserveQuota: atomic SQL 預扣估算額度
-   * SQL: UPDATE api_keys SET quota_tokens = quota_tokens - $estimated
-   *      WHERE id = $id AND (quota_tokens >= $estimated OR quota_tokens = -1)
-   *      RETURNING quota_tokens
    */
   async reserveQuota(keyId: string, estimatedTokens: number): Promise<ReserveQuotaResult> {
     const { data, error } = await supabaseAdmin.rpc('reserve_quota', {
@@ -150,7 +147,6 @@ export class KeyService {
     }
 
     if (data === null || data === undefined) {
-      // No rows updated → insufficient quota
       return { success: false }
     }
 
@@ -159,10 +155,6 @@ export class KeyService {
 
   /**
    * settleQuota: 結算差額
-   * diff = reservedTokens - actualTokens（正數代表退回，負數代表補扣）
-   * quota_tokens = -1 的 key 透過 SQL WHERE quota_tokens != -1 自動跳過
-   * SQL: UPDATE api_keys SET quota_tokens = quota_tokens + $diff
-   *      WHERE id = $id AND quota_tokens != -1
    */
   async settleQuota(keyId: string, reservedTokens: number, actualTokens: number): Promise<void> {
     const diff = reservedTokens - actualTokens
@@ -190,7 +182,6 @@ export class KeyService {
       throw new Error(`Failed to check spend limit: ${error.message}`)
     }
 
-    // data === null 表示查無此 key，保守處理為拒絕
     if (data === null || data === undefined) {
       return false
     }
@@ -216,6 +207,20 @@ export class KeyService {
   }
 
   /**
+   * resetSpend: 呼叫 reset_spend RPC，將 spent_usd 歸零
+   * 通常由 admin 操作呼叫
+   */
+  async resetSpend(keyId: string): Promise<void> {
+    const { error } = await supabaseAdmin.rpc('reset_spend', {
+      p_key_id: keyId,
+    })
+
+    if (error) {
+      throw new Error(`Failed to reset spend: ${error.message}`)
+    }
+  }
+
+  /**
    * updateSpendLimit: 更新 key 的花費上限
    * spendLimitUsd: -1 = 無限制；0 = 完全禁止；正整數 = 美分上限
    */
@@ -233,7 +238,6 @@ export class KeyService {
 
   /**
    * listKeys: 回傳用戶所有 keys，包含 spend_limit_usd 和 spent_usd
-   * （覆寫父類以選取新欄位）
    */
   async listKeys(userId: string): Promise<ApiKeyRecord[]> {
     const { data, error } = await supabaseAdmin

@@ -5,6 +5,7 @@ import { AggregationService } from '../services/AggregationService.js'
 import { RatesService } from '../services/RatesService.js'
 import { RouteConfigService } from '../services/RouteConfigService.js'
 import type { Period } from '../services/AggregationService.js'
+import { KeyService } from '../services/KeyService.js'
 
 const VALID_PERIODS: Period[] = ['24h', '7d', '30d']
 
@@ -22,6 +23,7 @@ export function adminRoutes() {
   const aggregationSvc = new AggregationService()
   const ratesSvc = new RatesService()
   const routeConfigSvc = new RouteConfigService()
+  const keyService = new KeyService()
 
   /**
    * GET /admin/users — List all users with quota info
@@ -698,6 +700,120 @@ export function adminRoutes() {
       console.error('admin toggle route error:', err)
       return Errors.internalError()
     }
+  })
+
+
+  // ---------------------------------------------------------------------------
+  // Admin Spend endpoints
+  // ---------------------------------------------------------------------------
+
+  /**
+   * GET /admin/keys/:id/spend — Get spend info for a specific API key
+   */
+  router.get('/keys/:id/spend', async (c) => {
+    const keyId = c.req.param('id')
+
+    const { data, error } = await supabaseAdmin
+      .from('api_keys')
+      .select('id, name, prefix, user_id, status, spend_limit_usd, spent_usd')
+      .eq('id', keyId)
+      .single()
+
+    if (error || !data) {
+      return Errors.notFound()
+    }
+
+    return c.json({
+      data: {
+        id: data.id,
+        name: data.name,
+        key_prefix: data.prefix,
+        user_id: data.user_id,
+        status: data.status,
+        spend_limit_usd: data.spend_limit_usd,
+        spent_usd: data.spent_usd,
+      },
+    })
+  })
+
+  /**
+   * PATCH /admin/keys/:id/spend-limit — Set the spend limit for an API key
+   */
+  router.patch('/keys/:id/spend-limit', async (c) => {
+    const keyId = c.req.param('id')
+    const body = await c.req.json<{ spend_limit_usd?: number }>().catch(() => ({}))
+
+    if (
+      body.spend_limit_usd === undefined ||
+      typeof body.spend_limit_usd !== 'number' ||
+      !Number.isInteger(body.spend_limit_usd) ||
+      body.spend_limit_usd < -1
+    ) {
+      return Errors.invalidParam('spend_limit_usd must be an integer >= -1 (-1 means unlimited).')
+    }
+
+    // Verify key exists
+    const { data: existing, error: fetchErr } = await supabaseAdmin
+      .from('api_keys')
+      .select('id, spent_usd')
+      .eq('id', keyId)
+      .single()
+
+    if (fetchErr || !existing) {
+      return Errors.notFound()
+    }
+
+    const { error } = await supabaseAdmin
+      .from('api_keys')
+      .update({ spend_limit_usd: body.spend_limit_usd })
+      .eq('id', keyId)
+
+    if (error) {
+      console.error('admin set spend-limit error:', error)
+      return Errors.internalError()
+    }
+
+    return c.json({
+      data: {
+        id: keyId,
+        spend_limit_usd: body.spend_limit_usd,
+        spent_usd: existing.spent_usd,
+      },
+    })
+  })
+
+  /**
+   * POST /admin/keys/:id/reset-spend — Reset the spend counter for an API key
+   */
+  router.post('/keys/:id/reset-spend', async (c) => {
+    const keyId = c.req.param('id')
+
+    // Verify key exists and get current spend_limit_usd
+    const { data: existing, error: fetchErr } = await supabaseAdmin
+      .from('api_keys')
+      .select('id, spend_limit_usd')
+      .eq('id', keyId)
+      .single()
+
+    if (fetchErr || !existing) {
+      return Errors.notFound()
+    }
+
+    try {
+      await keyService.resetSpend(keyId)
+    } catch (err) {
+      console.error('admin reset-spend error:', err)
+      return Errors.internalError()
+    }
+
+    return c.json({
+      data: {
+        id: keyId,
+        spent_usd: 0,
+        spend_limit_usd: existing.spend_limit_usd,
+        message: 'Spend counter reset successfully',
+      },
+    })
   })
 
   return router

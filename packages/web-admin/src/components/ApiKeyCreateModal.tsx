@@ -6,7 +6,7 @@ import CopyableTextField from './CopyableTextField'
 
 interface ApiKeyCreateModalProps {
   open: boolean
-  onCreate: (name: string) => Promise<{ key: string }>
+  onCreate: (name: string, spendLimitUsd?: number) => Promise<{ key: string }>
   onClose: () => void
 }
 
@@ -16,6 +16,7 @@ export default function ApiKeyCreateModal({
   onClose,
 }: ApiKeyCreateModalProps) {
   const [name, setName] = useState('')
+  const [spendLimitInput, setSpendLimitInput] = useState('')
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [newKey, setNewKey] = useState<string | null>(null)
@@ -28,7 +29,18 @@ export default function ApiKeyCreateModal({
     setCreating(true)
     setError(null)
     try {
-      const result = await onCreate(name.trim())
+      // Parse spend limit: empty = unlimited (-1), otherwise convert $ to cents
+      let spendLimitUsd: number | undefined
+      if (spendLimitInput.trim() !== '') {
+        const dollars = parseFloat(spendLimitInput)
+        if (isNaN(dollars) || dollars < 0) {
+          setError('花費上限必須是 0 或正數（美元）')
+          setCreating(false)
+          return
+        }
+        spendLimitUsd = Math.round(dollars * 100)
+      }
+      const result = await onCreate(name.trim(), spendLimitUsd)
       setNewKey(result.key)
     } catch (err) {
       setError(err instanceof Error ? err.message : '建立失敗')
@@ -39,6 +51,7 @@ export default function ApiKeyCreateModal({
 
   function handleClose() {
     setName('')
+    setSpendLimitInput('')
     setError(null)
     setNewKey(null)
     onClose()
@@ -101,6 +114,28 @@ export default function ApiKeyCreateModal({
                   disabled={creating}
                   autoFocus
                 />
+              </div>
+              <div>
+                <label
+                  htmlFor="spend-limit"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  花費上限（USD，選填）
+                </label>
+                <input
+                  id="spend-limit"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={spendLimitInput}
+                  onChange={(e) => setSpendLimitInput(e.target.value)}
+                  placeholder="留空 = 無限制，例如 5.00"
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+                  disabled={creating}
+                />
+                <p className="mt-1 text-xs text-gray-400">
+                  設定此 Key 的最大花費上限。留空表示無限制。
+                </p>
               </div>
               {error && <p className="text-sm text-red-500">{error}</p>}
               <div className="flex gap-3 justify-end">

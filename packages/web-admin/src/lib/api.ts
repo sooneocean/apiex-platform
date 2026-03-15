@@ -32,6 +32,8 @@ export interface ApiKey {
   name: string;
   status: string;
   quota_tokens: number;
+  spend_limit_usd: number;
+  spent_usd: number;
   created_at: string;
 }
 
@@ -222,8 +224,13 @@ export function makeTopupApi(token: string) {
 export function makeKeysApi(token: string) {
   return {
     list: () => apiGet<ApiKeysResponse>("/keys", token),
-    create: (name: string) => apiPost<CreateKeyResponse>("/keys", { name }, token),
+    create: (name: string, spendLimitUsd?: number) =>
+      apiPost<CreateKeyResponse>("/keys", { name, ...(spendLimitUsd !== undefined ? { spend_limit_usd: spendLimitUsd } : {}) }, token),
     revoke: (id: string) => apiDelete<{ success: boolean }>(`/keys/${id}`, token),
+    updateSpendLimit: (id: string, spendLimitUsd: number) =>
+      apiPatch<{ data: { id: string; spend_limit_usd: number } }>(`/keys/${id}`, { spend_limit_usd: spendLimitUsd }, token),
+    resetSpend: (id: string) =>
+      apiPost<{ data: { id: string; spent_usd: number; spend_limit_usd: number; message: string } }>(`/keys/${id}/reset-spend`, {}, token),
   };
 }
 
