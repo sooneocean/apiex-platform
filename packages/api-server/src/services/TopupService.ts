@@ -232,35 +232,16 @@ export class TopupService {
   // ─── private: addQuota ───────────────────────────────────────────────────
 
   private async addQuota(userId: string, tokens: number): Promise<void> {
-    // UPSERT user_quotas: increment default_quota_tokens
-    const { error: quotaError } = await this.db
-      .from('user_quotas')
-      .upsert({
-        user_id: userId,
-        default_quota_tokens: tokens,
-        updated_at: new Date().toISOString(),
-      })
-      .select()
-      .single()
+    // Use atomic SQL function to INCREMENT quota (not set).
+    // Handles both user_quotas UPSERT and api_keys UPDATE in one call.
+    // Skips api_keys with quota_tokens = -1 (unlimited).
+    const { error } = await this.db.rpc('add_topup_quota', {
+      p_user_id: userId,
+      p_tokens: tokens,
+    })
 
-    if (quotaError && quotaError.code !== '23505') {
-      // For an UPSERT we ideally want additive behaviour via RPC, but for MVP
-      // we use the upsert as an initial seed and rely on the api_keys update.
-      // If a record already existed, supabase upsert will overwrite — this is
-      // a known limitation addressed in a follow-up RPC.  Non-23505 errors
-      // are re-thrown.
-      throw new Error(`Failed to upsert user_quotas: ${quotaError.message}`)
-    }
-
-    // UPDATE api_keys: add tokens to all active keys that have a finite quota
-    const { error: keysError } = await this.db
-      .from('api_keys')
-      .update({ quota_tokens: tokens })
-      .eq('user_id', userId)
-      .eq('status', 'active')
-
-    if (keysError) {
-      throw new Error(`Failed to update api_keys quota: ${keysError.message}`)
+    if (error) {
+      throw new Error(`Failed to add topup quota: ${error.message}`)
     }
   }
 }

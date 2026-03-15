@@ -28,6 +28,7 @@ vi.mock('../../lib/supabase.js', () => {
   return {
     supabaseAdmin: {
       from: vi.fn(),
+      rpc: vi.fn(),
     },
     supabaseClient: {},
   }
@@ -142,27 +143,16 @@ describe('TopupService', () => {
       mockConstructEvent.mockReturnValueOnce(fakeEvent)
 
       const fromMock = supabaseAdmin.from as ReturnType<typeof vi.fn>
+      const rpcMock = supabaseAdmin.rpc as ReturnType<typeof vi.fn>
 
       // 1st call: INSERT topup_logs
       const insertChain = buildChain({
         single: vi.fn().mockResolvedValue({ data: { id: 'log-1' }, error: null }),
       })
+      fromMock.mockReturnValueOnce(insertChain)
 
-      // 2nd call: UPSERT user_quotas
-      const upsertQuotaChain = buildChain({
-        select: vi.fn().mockReturnThis(),
-        single: vi.fn().mockResolvedValue({ data: {}, error: null }),
-      })
-
-      // 3rd call: UPDATE api_keys
-      const updateKeysChain = buildChain({
-        select: vi.fn().mockResolvedValue({ data: [], error: null }),
-      })
-
-      fromMock
-        .mockReturnValueOnce(insertChain)
-        .mockReturnValueOnce(upsertQuotaChain)
-        .mockReturnValueOnce(updateKeysChain)
+      // 2nd call: RPC add_topup_quota (atomic increment)
+      rpcMock.mockResolvedValueOnce({ data: null, error: null })
 
       await expect(
         service.handleWebhookEvent('raw-body', 'stripe-sig-valid')
@@ -178,18 +168,11 @@ describe('TopupService', () => {
         })
       )
 
-      // user_quotas UPSERT
-      expect(upsertQuotaChain.upsert).toHaveBeenCalledWith(
-        expect.objectContaining({
-          user_id: 'user-uuid-1',
-        })
-      )
-
-      // api_keys UPDATE
-      expect(updateKeysChain.update).toHaveBeenCalledWith(
-        expect.objectContaining({})
-      )
-      expect(updateKeysChain.eq).toHaveBeenCalledWith('user_id', 'user-uuid-1')
+      // Atomic quota increment via RPC
+      expect(rpcMock).toHaveBeenCalledWith('add_topup_quota', {
+        p_user_id: 'user-uuid-1',
+        p_tokens: 1000000,
+      })
     })
 
     // ─────────────────────────────────────────────────────────────
