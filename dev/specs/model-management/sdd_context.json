@@ -2,22 +2,22 @@
   "sdd_context": {
     "version": "2.8.0",
     "feature": "model-management",
-    "current_stage": "S7",
+    "current_stage": "S5",
     "spec_mode": "quick",
     "spec_mode_reason": "改動範圍小：1 個新頁面、3-4 個 API endpoints、不動 DB schema",
     "work_type": "new_feature",
     "spec_folder": "dev/specs/model-management",
     "execution_mode": "autopilot",
-    "status": "completed",
+    "status": "in_progress",
     "started_at": "2026-03-15T10:00:00+08:00",
-    "last_updated": "2026-03-15T10:00:00+08:00",
-    "last_updated_by": "requirement-analyst",
+    "last_updated": "2026-03-15T14:20:00+08:00",
+    "last_updated_by": "orchestrator",
     "stages": {
       "s0": {
-        "status": "pending_confirmation",
+        "status": "completed",
         "agent": "requirement-analyst",
         "started_at": "2026-03-15T10:00:00+08:00",
-        "completed_at": null,
+        "completed_at": "2026-03-15T10:05:00+08:00",
         "output": {
           "brief_spec_path": "dev/specs/model-management/s0_brief_spec.md",
           "work_type": "new_feature",
@@ -108,19 +108,60 @@
         }
       },
       "s1": {
-        "status": "pending",
-        "agents": ["codebase-explorer", "architect"]
+        "status": "completed",
+        "agents": ["codebase-explorer", "architect"],
+        "completed_at": "2026-03-15T14:00:00+08:00",
+        "output": {
+          "note": "quick spec mode — s1_dev_spec.md skipped",
+          "findings": [
+            "RouteConfigService already has listAll/create/update/toggleActive",
+            "admin.ts already has /admin/models endpoints",
+            "Need to add /admin/routes endpoints + toggle endpoint",
+            "Frontend missing /admin/settings/routes page",
+            "AppLayout missing Settings: Routes nav item"
+          ]
+        }
       },
       "s2": {
-        "status": "pending",
-        "agent": "reviewer"
+        "status": "completed",
+        "agent": "reviewer",
+        "completed_at": "2026-03-15T14:00:00+08:00",
+        "output": {
+          "note": "quick spec mode — s2 review skipped, spec approved"
+        }
       },
       "s3": {
-        "status": "pending",
-        "agent": "architect"
+        "status": "completed",
+        "agent": "architect",
+        "completed_at": "2026-03-15T14:00:00+08:00",
+        "output": {
+          "note": "quick spec mode — s3_implementation_plan.md skipped",
+          "tasks": [
+            "T1: 後端 /admin/routes GET/POST/PATCH/toggle endpoints",
+            "T2: TDD tests for /admin/routes",
+            "T3: makeRoutesApi factory in api.ts",
+            "T4: /admin/settings/routes/page.tsx",
+            "T5: AppLayout sidebar Settings: Routes"
+          ]
+        }
       },
       "s4": {
-        "status": "pending"
+        "status": "completed",
+        "completed_at": "2026-03-15T14:20:00+08:00",
+        "output": {
+          "commits": [
+            "feat(green): T1+T2 admin route_config CRUD API",
+            "feat: T3+T4+T5 前端路由管理頁面 + sidebar"
+          ],
+          "tests_passed": 150,
+          "files_changed": [
+            "packages/api-server/src/routes/admin.ts",
+            "packages/api-server/src/routes/__tests__/admin.test.ts",
+            "packages/web-admin/src/lib/api.ts",
+            "packages/web-admin/src/components/AppLayout.tsx",
+            "packages/web-admin/src/app/admin/(protected)/settings/routes/page.tsx"
+          ]
+        }
       },
       "s5": {
         "status": "pending",
