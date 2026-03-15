@@ -74,6 +74,15 @@ export default function DashboardPage() {
     )
   }
 
+  async function handleTierUpdate(userId: string, tier: string) {
+    const token = await getToken()
+    const adminApi = makeAdminApi(token)
+    await adminApi.setRateLimit(userId, tier)
+    setUsers((prev) =>
+      prev.map((u) => (u.id === userId ? { ...u, rate_limit_tier: tier } : u))
+    )
+  }
+
   async function handleRevokeKey(id: string) {
     const token = await getToken()
     const keysApi = makeKeysApi(token)
@@ -117,7 +126,7 @@ export default function DashboardPage() {
               Loading users...
             </div>
           ) : (
-            <UserTable users={users} onQuotaUpdate={handleQuotaUpdate} />
+            <UserTable users={users} onQuotaUpdate={handleQuotaUpdate} onTierUpdate={handleTierUpdate} />
           )}
         </div>
       </section>

@@ -8,6 +8,7 @@ export interface AdminUser {
   key_count: number;
   total_tokens_used: number;
   quota_tokens: number;
+  rate_limit_tier: string;
   created_at: string;
 }
 
@@ -173,6 +174,12 @@ export function makeAdminApi(token: string) {
     getUsers: () => apiGet<AdminUsersResponse>("/admin/users", token),
     setQuota: (userId: string, quotaTokens: number) =>
       apiPatch<AdminUser>(`/admin/users/${userId}/quota`, { quota_tokens: quotaTokens }, token),
+    setRateLimit: (userId: string, tier: string) =>
+      apiPatch<{ data: { user_id: string; updated_keys: number; tier: string } }>(
+        `/admin/users/${userId}/rate-limit`,
+        { tier },
+        token
+      ),
     getUsageLogs: (query: UsageLogsQuery = {}) => {
       const params = new URLSearchParams();
       if (query.model_tag) params.set("model_tag", query.model_tag);
