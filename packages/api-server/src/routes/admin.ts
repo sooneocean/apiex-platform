@@ -236,6 +236,9 @@ export function adminRoutes() {
       const result = await aggregationSvc.getOverview(period)
       return c.json({ data: result })
     } catch (err) {
+      if (err instanceof Error && err.message.includes('statement_timeout')) {
+        return Errors.gatewayTimeout()
+      }
       console.error('admin overview error:', err)
       return Errors.internalError()
     }
@@ -253,6 +256,9 @@ export function adminRoutes() {
       const result = await aggregationSvc.getLatencyTimeseries({ period })
       return c.json({ data: result })
     } catch (err) {
+      if (err instanceof Error && err.message.includes('statement_timeout')) {
+        return Errors.gatewayTimeout()
+      }
       console.error('admin latency error:', err)
       return Errors.internalError()
     }
@@ -272,6 +278,9 @@ export function adminRoutes() {
       const result = await aggregationSvc.getTopUsers(period, limit)
       return c.json({ data: result })
     } catch (err) {
+      if (err instanceof Error && err.message.includes('statement_timeout')) {
+        return Errors.gatewayTimeout()
+      }
       console.error('admin top-users error:', err)
       return Errors.internalError()
     }

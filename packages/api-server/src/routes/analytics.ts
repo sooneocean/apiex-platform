@@ -43,6 +43,9 @@ export function analyticsRoutes() {
       const result = await svc.getTimeseries({ period, userId: keyId ? undefined : userId, keyId })
       return c.json({ data: result })
     } catch (err) {
+      if (err instanceof Error && err.message.includes('statement_timeout')) {
+        return Errors.gatewayTimeout()
+      }
       console.error('timeseries error:', err)
       return Errors.internalError()
     }
@@ -71,6 +74,9 @@ export function analyticsRoutes() {
       const result = await svc.getModelBreakdown({ period, userId: keyId ? undefined : userId, keyId })
       return c.json({ data: result })
     } catch (err) {
+      if (err instanceof Error && err.message.includes('statement_timeout')) {
+        return Errors.gatewayTimeout()
+      }
       console.error('model-breakdown error:', err)
       return Errors.internalError()
     }
@@ -99,6 +105,9 @@ export function analyticsRoutes() {
       const result = await svc.getLatencyTimeseries({ period, userId: keyId ? undefined : userId, keyId })
       return c.json({ data: result })
     } catch (err) {
+      if (err instanceof Error && err.message.includes('statement_timeout')) {
+        return Errors.gatewayTimeout()
+      }
       console.error('latency error:', err)
       return Errors.internalError()
     }
@@ -118,6 +127,9 @@ export function analyticsRoutes() {
       const result = await svc.getBillingSummary({ userId, period })
       return c.json({ data: result })
     } catch (err) {
+      if (err instanceof Error && err.message.includes('statement_timeout')) {
+        return Errors.gatewayTimeout()
+      }
       console.error('billing error:', err)
       return Errors.internalError()
     }
