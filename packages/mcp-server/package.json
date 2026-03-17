@@ -1,5 +1,5 @@
 {
-  "name": "@apiex/mcp",
+  "name": "@sooneocean/apiex-mcp",
   "version": "0.1.0",
   "type": "module",
   "bin": {
