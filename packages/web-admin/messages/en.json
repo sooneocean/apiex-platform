@@ -43,6 +43,7 @@
     "topup": "Top Up",
     "logs": "Topup History",
     "webhooks": "Webhook",
+    "playground": "Playground",
     "logout": "Logout"
   },
   "login": {

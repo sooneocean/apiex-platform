@@ -17,6 +17,7 @@ export default function PortalLayout({ children }: PortalLayoutProps) {
 
   const navItems = [
     { href: '/portal/dashboard', label: t('dashboard') },
+    { href: '/portal/playground', label: t('playground') },
     { href: '/portal/topup', label: t('topup') },
     { href: '/portal/logs', label: t('logs') },
     { href: '/portal/settings/webhooks', label: t('webhooks') },

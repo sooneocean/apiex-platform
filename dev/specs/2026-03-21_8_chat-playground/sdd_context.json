@@ -1,0 +1,53 @@
+{
+  "sdd_context": {
+    "version": "3.0.0",
+    "feature": "chat-playground",
+    "feature_name": "Chat Playground — Portal 內建聊天測試介面",
+    "current_stage": "S0",
+    "spec_mode": "quick",
+    "spec_mode_reason": "純前端新頁面，無 DB/API 變更，使用既有端點",
+    "work_type": "new_feature",
+    "spec_folder": "dev/specs/2026-03-21_8_chat-playground",
+    "execution_mode": "autopilot",
+    "status": "in_progress",
+    "started_at": "2026-03-21T12:00:00Z",
+    "last_updated": "2026-03-21T12:00:00Z",
+    "last_updated_by": "requirement-analyst",
+    "stages": {
+      "s0": {
+        "status": "completed",
+        "agent": "requirement-analyst",
+        "started_at": "2026-03-21T12:00:00Z",
+        "completed_at": "2026-03-21T12:02:00Z",
+        "output": {
+          "work_type": "new_feature",
+          "requirement": "在 Portal 新增 /portal/playground 聊天測試頁面，支援模型選擇、API Key 選擇、SSE 串流回應",
+          "goal": "消除測試摩擦，用戶在 Portal 即可即時測試 API Key 和模型",
+          "success_criteria": [
+            "SC-1: /portal/playground 頁面可正常存取",
+            "SC-2: 可選擇模型（從 /v1/models 取得）",
+            "SC-3: 可輸入訊息並收到串流回應（SSE）",
+            "SC-4: 對話歷史正確顯示（user + assistant）",
+            "SC-5: 顯示 token 使用量統計",
+            "SC-6: pnpm build 零錯誤"
+          ],
+          "scope_in": [
+            "新增 /portal/playground/page.tsx",
+            "SSE 串流客戶端（fetch + ReadableStream）",
+            "模型選擇器（/v1/models）",
+            "API Key 選擇器（既有 keys API）",
+            "localStorage 對話歷史",
+            "AppLayout 導航整合"
+          ],
+          "scope_out": [
+            "後端 API 變更",
+            "資料庫儲存對話",
+            "多對話分頁",
+            "系統提示詞編輯",
+            "圖片/檔案上傳"
+          ]
+        }
+      }
+    }
+  }
+}

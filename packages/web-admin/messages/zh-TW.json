@@ -43,6 +43,7 @@
     "topup": "儲值",
     "logs": "充值記錄",
     "webhooks": "Webhook",
+    "playground": "Playground",
     "logout": "登出"
   },
   "login": {
