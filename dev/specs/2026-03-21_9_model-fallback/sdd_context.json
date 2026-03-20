@@ -1,0 +1,49 @@
+{
+  "sdd_context": {
+    "version": "3.0.0",
+    "feature": "model-fallback",
+    "feature_name": "Model Fallback/Retry — 上游失敗自動切換備用路由",
+    "current_stage": "S0",
+    "spec_mode": "quick",
+    "spec_mode_reason": "改動集中在 RouterService + proxy.ts + 1 migration",
+    "work_type": "new_feature",
+    "spec_folder": "dev/specs/2026-03-21_9_model-fallback",
+    "execution_mode": "autopilot",
+    "status": "in_progress",
+    "started_at": "2026-03-21T13:00:00Z",
+    "last_updated": "2026-03-21T13:00:00Z",
+    "last_updated_by": "requirement-analyst",
+    "stages": {
+      "s0": {
+        "status": "completed",
+        "agent": "requirement-analyst",
+        "started_at": "2026-03-21T13:00:00Z",
+        "completed_at": "2026-03-21T13:02:00Z",
+        "output": {
+          "work_type": "new_feature",
+          "requirement": "上游 provider 失敗時自動嘗試同 tag 下一個候選路由，最多 3 次",
+          "goal": "provider 故障不再等於 gateway 故障，實現多 provider 自動容錯",
+          "success_criteria": [
+            "SC-1: resolveRoute() 回傳多個候選路由（依 priority 排序）",
+            "SC-2: 第一個上游失敗時自動嘗試下一個",
+            "SC-3: 最多重試 2 次（共 3 次嘗試）",
+            "SC-4: 全部候選失敗時回傳最後一個錯誤",
+            "SC-5: 全部現有測試通過",
+            "SC-6: pnpm build 零錯誤"
+          ],
+          "scope_in": [
+            "route_config 表新增 priority 欄位 + migration",
+            "RouterService.resolveRoute() 改為回傳陣列",
+            "proxy.ts forward 區塊加入 fallback loop",
+            "既有測試修復"
+          ],
+          "scope_out": [
+            "Circuit breaker / 健康檢查",
+            "前端 UI 變更",
+            "加權隨機路由"
+          ]
+        }
+      }
+    }
+  }
+}

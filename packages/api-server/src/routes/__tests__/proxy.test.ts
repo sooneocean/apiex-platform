@@ -42,6 +42,7 @@ vi.mock('../../lib/supabase.js', () => ({
 vi.mock('../../services/RouterService.js', () => ({
   RouterService: class {
     resolveRoute = mockResolveRoute
+    resolveRoutes = (...args: unknown[]) => mockResolveRoute(...args).then((r: unknown) => [r])
     forward = mockForward
     getAdapter = mockGetAdapter
     listActiveModels = mockListActiveModels

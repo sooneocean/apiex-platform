@@ -56,10 +56,12 @@ import { RouterService } from '../RouterService.js'
 import { InvalidRequestError, ServerError } from '../../lib/errors.js'
 
 function mockRouteQuery(data: unknown, error: unknown = null) {
+  // resolveRoutes() uses .select().eq().eq().order() — returns array
+  const arrayData = data ? [data] : []
   const chain = {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
-    single: vi.fn().mockResolvedValue({ data, error }),
+    order: vi.fn().mockResolvedValue({ data: error ? null : arrayData, error }),
   }
   mockFrom.mockReturnValueOnce(chain)
   return chain

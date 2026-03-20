@@ -43,24 +43,33 @@ export class RouterService {
   }
 
   /**
-   * Resolve a model tag to a route_config record.
-   * Queries route_config WHERE tag = $1 AND is_active = true.
+   * Resolve a model tag to all active route_config records, sorted by priority (asc).
+   * Used for fallback: if the first route fails, try the next.
    */
-  async resolveRoute(modelTag: string): Promise<RouteRecord> {
+  async resolveRoutes(modelTag: string): Promise<RouteRecord[]> {
     const { data, error } = await supabaseAdmin
       .from('route_config')
       .select('*')
       .eq('tag', modelTag)
       .eq('is_active', true)
-      .single()
+      .order('priority', { ascending: true })
 
-    if (error || !data) {
+    if (error || !data || data.length === 0) {
       throw new InvalidRequestError(
         `Model '${modelTag}' is not supported. Valid values: apex-smart, apex-cheap.`
       )
     }
 
-    return data as RouteRecord
+    return data as RouteRecord[]
+  }
+
+  /**
+   * Resolve a model tag to a single route_config record (first by priority).
+   * Backwards-compatible wrapper around resolveRoutes().
+   */
+  async resolveRoute(modelTag: string): Promise<RouteRecord> {
+    const routes = await this.resolveRoutes(modelTag)
+    return routes[0]
   }
 
   /**

@@ -129,73 +129,39 @@ export function proxyRoutes() {
       return Errors.spendLimitExceeded()
     }
 
-    // Step 5 — resolve route (503 if not configured, with quota refund)
-    let route
+    // Step 5 — resolve routes with fallback candidates (sorted by priority)
+    let routes: Awaited<ReturnType<typeof routerService.resolveRoutes>>
     try {
-      route = await routerService.resolveRoute(body.model)
+      routes = await routerService.resolveRoutes(body.model)
     } catch {
-      // Route not configured — refund reserved quota and return 503
       keyService.settleQuota(apiKeyId, estimatedTokens, 0).catch((err) => log.proxy.error('fire-and-forget failed', { err }))
       return Errors.routeNotConfigured()
     }
 
-    // Step 6 — forward to upstream
-    const llmSpan = tracer.startSpan('llm.proxy', {
-      attributes: {
-        'llm.model': route.tag,
-        'llm.provider': route.provider,
-        'llm.estimated_tokens': estimatedTokens,
-        'llm.stream': isStream,
-      },
-    })
-    try {
-      const result = await routerService.forward(route, body, isStream)
+    // Step 6 — forward with fallback (max 3 attempts)
+    const MAX_ATTEMPTS = 3
+    const candidates = routes.slice(0, MAX_ATTEMPTS)
+    let lastError: unknown = null
 
-      if (result.type === 'json') {
-        // Non-streaming response
-        const latencyMs = Date.now() - startTime
-        const usage = result.data.usage
+    for (let attempt = 0; attempt < candidates.length; attempt++) {
+      const route = candidates[attempt]
+      const llmSpan = tracer.startSpan('llm.proxy', {
+        attributes: {
+          'llm.model': route.tag,
+          'llm.provider': route.upstream_provider,
+          'llm.estimated_tokens': estimatedTokens,
+          'llm.stream': isStream,
+          'llm.attempt': attempt + 1,
+          'llm.fallback': attempt > 0,
+        },
+      })
 
-        llmSpan.setAttributes({
-          'llm.total_tokens': usage.total_tokens,
-          'llm.prompt_tokens': usage.prompt_tokens,
-          'llm.completion_tokens': usage.completion_tokens,
-          'llm.latency_ms': latencyMs,
-        })
-        llmSpan.setStatus({ code: SpanStatusCode.OK })
-        llmSpan.end()
+      try {
+        const result = await routerService.forward(route, body, isStream)
 
-        // Fire-and-forget post-processing
-        finalizeUsage({
-          keyService, ratesService, usageLogger, webhookService,
-          apiKeyId, userId, estimatedTokens, usage, route, latencyMs,
-          status: 'success', model: body.model,
-        })
-
-        return c.json(result.data)
-      }
-
-      // Streaming response
-      c.header('Content-Type', 'text/event-stream')
-      c.header('Cache-Control', 'no-cache')
-      c.header('Connection', 'keep-alive')
-
-      return honoStream(c, async (stream) => {
-        const reader = result.stream.getReader()
-
-        try {
-          while (true) {
-            const { done, value } = await reader.read()
-            if (done) break
-            await stream.write(value)
-          }
-        } catch (err) {
-          log.proxy.error('stream error', { err })
-        } finally {
-          // Stream complete — settle quota and log usage
+        if (result.type === 'json') {
           const latencyMs = Date.now() - startTime
-          const usage = result.usage
-
+          const usage = result.data.usage
           llmSpan.setAttributes({
             'llm.total_tokens': usage.total_tokens,
             'llm.prompt_tokens': usage.prompt_tokens,
@@ -205,28 +171,75 @@ export function proxyRoutes() {
           llmSpan.setStatus({ code: SpanStatusCode.OK })
           llmSpan.end()
 
-          // Fire-and-forget post-processing
           finalizeUsage({
             keyService, ratesService, usageLogger, webhookService,
             apiKeyId, userId, estimatedTokens, usage, route, latencyMs,
             status: 'success', model: body.model,
           })
+
+          return c.json(result.data)
         }
-      })
-    } catch (err) {
-      // Upstream error — refund full quota + log error
-      const latencyMs = Date.now() - startTime
-      llmSpan.setStatus({ code: SpanStatusCode.ERROR, message: String(err) })
-      llmSpan.setAttribute('llm.latency_ms', latencyMs)
-      llmSpan.end()
-      finalizeUsage({
-        keyService, ratesService, usageLogger, webhookService,
-        apiKeyId, userId, estimatedTokens,
-        usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-        route, latencyMs, status: 'error', model: body.model,
-      })
-      // Re-throw so the error handler returns the correct status
-      throw err
+
+        // Streaming — no fallback mid-stream, return immediately
+        c.header('Content-Type', 'text/event-stream')
+        c.header('Cache-Control', 'no-cache')
+        c.header('Connection', 'keep-alive')
+
+        return honoStream(c, async (stream) => {
+          const reader = result.stream.getReader()
+          try {
+            while (true) {
+              const { done, value } = await reader.read()
+              if (done) break
+              await stream.write(value)
+            }
+          } catch (err) {
+            log.proxy.error('stream error', { err })
+          } finally {
+            const latencyMs = Date.now() - startTime
+            const usage = result.usage
+            llmSpan.setAttributes({
+              'llm.total_tokens': usage.total_tokens,
+              'llm.prompt_tokens': usage.prompt_tokens,
+              'llm.completion_tokens': usage.completion_tokens,
+              'llm.latency_ms': latencyMs,
+            })
+            llmSpan.setStatus({ code: SpanStatusCode.OK })
+            llmSpan.end()
+
+            finalizeUsage({
+              keyService, ratesService, usageLogger, webhookService,
+              apiKeyId, userId, estimatedTokens, usage, route, latencyMs,
+              status: 'success', model: body.model,
+            })
+          }
+        })
+      } catch (err) {
+        lastError = err
+        const latencyMs = Date.now() - startTime
+        llmSpan.setStatus({ code: SpanStatusCode.ERROR, message: String(err) })
+        llmSpan.setAttribute('llm.latency_ms', latencyMs)
+        llmSpan.end()
+
+        if (attempt < candidates.length - 1) {
+          log.proxy.warn('upstream failed, trying fallback', {
+            attempt: attempt + 1,
+            provider: route.upstream_provider,
+            model: route.upstream_model,
+            err,
+          })
+          continue
+        }
+
+        // All candidates exhausted — refund quota and throw
+        finalizeUsage({
+          keyService, ratesService, usageLogger, webhookService,
+          apiKeyId, userId, estimatedTokens,
+          usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+          route, latencyMs, status: 'error', model: body.model,
+        })
+        throw lastError
+      }
     }
   })
 
