@@ -48,17 +48,35 @@ const WEBHOOK_RESPONSE_MAX_BYTES = 1024
 
 const VALID_EVENTS = ['quota_warning', 'quota_exhausted', 'spend_warning', 'spend_limit_reached'] as const
 
-function isPrivateIP(ip: string): boolean {
+function isPrivateIPv4(ip: string): boolean {
   const parts = ip.split('.').map(Number)
-  if (parts.length === 4) {
-    if (parts[0] === 127) return true
-    if (parts[0] === 10) return true
-    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true
-    if (parts[0] === 192 && parts[1] === 168) return true
-    if (parts[0] === 169 && parts[1] === 254) return true
-    if (parts[0] === 0) return true
+  if (parts.length !== 4 || parts.some((p) => isNaN(p) || p < 0 || p > 255)) return false
+  if (parts[0] === 127) return true                                    // 127.0.0.0/8 loopback
+  if (parts[0] === 10) return true                                     // 10.0.0.0/8
+  if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true // 172.16.0.0/12
+  if (parts[0] === 192 && parts[1] === 168) return true                // 192.168.0.0/16
+  if (parts[0] === 169 && parts[1] === 254) return true                // 169.254.0.0/16 link-local
+  if (parts[0] === 0) return true                                      // 0.0.0.0/8
+  return false
+}
+
+function isPrivateIP(ip: string): boolean {
+  // IPv6 mapped IPv4 (::ffff:192.168.1.1)
+  if (ip.startsWith('::ffff:')) {
+    const v4 = ip.slice(7)
+    if (/^\d+\.\d+\.\d+\.\d+$/.test(v4)) return isPrivateIPv4(v4)
   }
-  if (ip === '::1' || ip === '::' || ip.startsWith('fc') || ip.startsWith('fd') || ip.startsWith('fe80')) return true
+
+  // Pure IPv4
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(ip)) return isPrivateIPv4(ip)
+
+  // IPv6 special addresses
+  const normalized = ip.split('%')[0].toLowerCase() // strip zone ID (e.g., fe80::1%eth0)
+  if (normalized === '::1') return true              // loopback
+  if (normalized === '::') return true               // unspecified
+  if (normalized.startsWith('fc') || normalized.startsWith('fd')) return true // ULA fc00::/7
+  if (normalized.startsWith('fe80')) return true     // link-local fe80::/10
+
   return false
 }
 

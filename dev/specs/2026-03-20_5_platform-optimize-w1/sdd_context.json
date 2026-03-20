@@ -1,0 +1,62 @@
+{
+  "sdd_context": {
+    "version": "3.0.0",
+    "feature": "platform-optimize-w1",
+    "feature_name": "平台優化 Wave 1 — DB 索引補齊 + SSRF IPv6 修復 + proxy.ts 重構",
+    "current_stage": "S0",
+    "spec_mode": "quick",
+    "spec_mode_reason": "純後端重構/修復，無新功能，~5 檔變更",
+    "work_type": "refactor",
+    "spec_folder": "dev/specs/2026-03-20_5_platform-optimize-w1",
+    "execution_mode": "autopilot",
+    "status": "in_progress",
+    "started_at": "2026-03-20T10:00:00Z",
+    "last_updated": "2026-03-20T10:00:00Z",
+    "last_updated_by": "requirement-analyst",
+    "stages": {
+      "s0": {
+        "status": "completed",
+        "agent": "requirement-analyst",
+        "started_at": "2026-03-20T10:00:00Z",
+        "completed_at": "2026-03-20T10:02:00Z",
+        "output": {
+          "work_type": "refactor",
+          "requirement": "3 個 P1 級別技術債清理：DB 索引補齊（效能）、SSRF IPv6 修復（安全）、proxy.ts post-processing 重構（品質）",
+          "goal": "消除已知效能瓶頸、安全漏洞和代碼重複，提升平台整體品質",
+          "pain_points": [
+            "webhook_logs/notification_logs 查詢無索引支撐",
+            "isPrivateIP() IPv6 檢查不完整，可能被繞過",
+            "proxy.ts post-processing 邏輯重複 ~11 次"
+          ],
+          "success_criteria": [
+            "SC-1: 新增 DB migration，補齊 webhook_logs、notification_logs、usage_logs 索引",
+            "SC-2: isPrivateIP() 正確處理 IPv6 mapped IPv4、ULA、link-local 等所有私有範圍",
+            "SC-3: proxy.ts post-processing 邏輯提取為共用方法，無重複代碼",
+            "SC-4: 全部現有測試通過（258）",
+            "SC-5: pnpm build 零錯誤"
+          ],
+          "scope_in": [
+            "新增 Supabase migration 檔案（CREATE INDEX CONCURRENTLY）",
+            "修復 WebhookService.isPrivateIP() IPv6 邏輯",
+            "重構 proxy.ts post-processing 為共用方法",
+            "修復深度嵌套 Promise 鏈 → async/await"
+          ],
+          "scope_out": [
+            "新功能開發",
+            "前端變更",
+            "Wave 2/3 優化項目（結構化日誌、Dockerfile、type-safe）"
+          ],
+          "constraints": [
+            "CREATE INDEX 需 CONCURRENTLY 避免鎖表",
+            "重構不可改變外部行為（純內部品質改善）",
+            "所有現有測試必須通過"
+          ],
+          "exceptions": [
+            "E1: CREATE INDEX CONCURRENTLY 不能在 transaction 內執行",
+            "E2: IPv6 邊界情況（::, ::1, ::ffff:127.0.0.1, fe80::1%eth0）"
+          ]
+        }
+      }
+    }
+  }
+}

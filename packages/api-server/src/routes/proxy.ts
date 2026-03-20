@@ -4,7 +4,7 @@ import { trace, SpanStatusCode } from '@opentelemetry/api'
 import { RouterService } from '../services/RouterService.js'
 import { KeyService } from '../services/KeyService.js'
 import { RatesService } from '../services/RatesService.js'
-import { UsageLogger, type UsageLogEntry } from '../services/UsageLogger.js'
+import { UsageLogger } from '../services/UsageLogger.js'
 import { WebhookService } from '../services/WebhookService.js'
 import { InsufficientQuotaError, Errors } from '../lib/errors.js'
 import type { OpenAIRequest } from '../adapters/types.js'
@@ -20,6 +20,63 @@ const tracer = trace.getTracer('api-server', '0.1.0')
  */
 function isSupportedModel(model: string): boolean {
   return model.startsWith('apex-')
+}
+
+/** Fire-and-forget post-processing after a proxy request completes. */
+async function finalizeUsage(opts: {
+  keyService: KeyService
+  ratesService: RatesService
+  usageLogger: UsageLogger
+  webhookService: WebhookService
+  apiKeyId: string
+  userId: string
+  estimatedTokens: number
+  usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number }
+  route: { tag: string; upstream_model: string }
+  latencyMs: number
+  status: 'success' | 'error'
+  model: string
+}) {
+  const { keyService, ratesService, usageLogger, webhookService } = opts
+  const { apiKeyId, userId, estimatedTokens, usage, route, latencyMs, status, model } = opts
+
+  // Settle quota
+  keyService.settleQuota(apiKeyId, estimatedTokens, usage.total_tokens).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
+
+  // Rate limiter
+  rateLimiter.record(apiKeyId, usage.total_tokens, model)
+
+  // Log usage
+  usageLogger.logUsage({
+    apiKeyId,
+    modelTag: route.tag,
+    upstreamModel: route.upstream_model,
+    promptTokens: usage.prompt_tokens,
+    completionTokens: usage.completion_tokens,
+    totalTokens: usage.total_tokens,
+    latencyMs,
+    status,
+  }).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
+
+  // Record spend + notify (only on success with actual tokens)
+  if (status === 'success' && usage.total_tokens > 0) {
+    try {
+      const rate = await ratesService.getEffectiveRate(route.tag, new Date())
+      if (rate) {
+        const costCents = Math.round(
+          (usage.prompt_tokens / 1000) * rate.input_rate_per_1k * 100 +
+          (usage.completion_tokens / 1000) * rate.output_rate_per_1k * 100
+        )
+        await keyService.recordSpend(apiKeyId, costCents)
+        webhookService.checkAndNotifySpend(userId, apiKeyId).catch((err) => console.error('[proxy] webhook notification failed:', err))
+      }
+    } catch (err) {
+      console.error('[proxy] fire-and-forget failed:', err)
+    }
+
+    // Quota notification
+    webhookService.checkAndNotifyQuota(userId, apiKeyId).catch((err) => console.error('[proxy] webhook notification failed:', err))
+  }
 }
 
 export function proxyRoutes() {
@@ -107,36 +164,12 @@ export function proxyRoutes() {
         llmSpan.setStatus({ code: SpanStatusCode.OK })
         llmSpan.end()
 
-        // Fire-and-forget: settle quota + log usage + record spend
-        keyService.settleQuota(apiKeyId, estimatedTokens, usage.total_tokens).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
-        rateLimiter.record(apiKeyId, usage.total_tokens, body.model)
-        const logEntry: UsageLogEntry = {
-          apiKeyId,
-          modelTag: route.tag,
-          upstreamModel: route.upstream_model,
-          promptTokens: usage.prompt_tokens,
-          completionTokens: usage.completion_tokens,
-          totalTokens: usage.total_tokens,
-          latencyMs,
-          status: 'success',
-        }
-        usageLogger.logUsage(logEntry).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
-
-        // Record spend (fire-and-forget): query rate and calculate cost in cents
-        ratesService.getEffectiveRate(route.tag, new Date()).then((rate) => {
-          if (rate) {
-            const costCents = Math.round(
-              (usage.prompt_tokens / 1000) * rate.input_rate_per_1k * 100 +
-              (usage.completion_tokens / 1000) * rate.output_rate_per_1k * 100
-            )
-            keyService.recordSpend(apiKeyId, costCents)
-              .then(() => webhookService.checkAndNotifySpend(userId, apiKeyId).catch((err) => console.error('[proxy] webhook notification failed:', err)))
-              .catch((err) => console.error('[proxy] fire-and-forget failed:', err))
-          }
-        }).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
-
-        // Quota notification (fire-and-forget)
-        webhookService.checkAndNotifyQuota(userId, apiKeyId).catch((err) => console.error('[proxy] webhook notification failed:', err))
+        // Fire-and-forget post-processing
+        finalizeUsage({
+          keyService, ratesService, usageLogger, webhookService,
+          apiKeyId, userId, estimatedTokens, usage, route, latencyMs,
+          status: 'success', model: body.model,
+        })
 
         return c.json(result.data)
       }
@@ -171,35 +204,12 @@ export function proxyRoutes() {
           llmSpan.setStatus({ code: SpanStatusCode.OK })
           llmSpan.end()
 
-          keyService.settleQuota(apiKeyId, estimatedTokens, usage.total_tokens).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
-          rateLimiter.record(apiKeyId, usage.total_tokens, body.model)
-          const logEntry: UsageLogEntry = {
-            apiKeyId,
-            modelTag: route.tag,
-            upstreamModel: route.upstream_model,
-            promptTokens: usage.prompt_tokens,
-            completionTokens: usage.completion_tokens,
-            totalTokens: usage.total_tokens,
-            latencyMs,
-            status: 'success',
-          }
-          usageLogger.logUsage(logEntry).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
-
-          // Record spend (fire-and-forget): query rate and calculate cost in cents
-          ratesService.getEffectiveRate(route.tag, new Date()).then((rate) => {
-            if (rate) {
-              const costCents = Math.round(
-                (usage.prompt_tokens / 1000) * rate.input_rate_per_1k * 100 +
-                (usage.completion_tokens / 1000) * rate.output_rate_per_1k * 100
-              )
-              keyService.recordSpend(apiKeyId, costCents)
-                .then(() => webhookService.checkAndNotifySpend(userId, apiKeyId).catch((err) => console.error('[proxy] webhook notification failed:', err)))
-                .catch((err) => console.error('[proxy] fire-and-forget failed:', err))
-            }
-          }).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
-
-          // Quota notification (fire-and-forget)
-          webhookService.checkAndNotifyQuota(userId, apiKeyId).catch((err) => console.error('[proxy] webhook notification failed:', err))
+          // Fire-and-forget post-processing
+          finalizeUsage({
+            keyService, ratesService, usageLogger, webhookService,
+            apiKeyId, userId, estimatedTokens, usage, route, latencyMs,
+            status: 'success', model: body.model,
+          })
         }
       })
     } catch (err) {
@@ -208,18 +218,12 @@ export function proxyRoutes() {
       llmSpan.setStatus({ code: SpanStatusCode.ERROR, message: String(err) })
       llmSpan.setAttribute('llm.latency_ms', latencyMs)
       llmSpan.end()
-      keyService.settleQuota(apiKeyId, estimatedTokens, 0).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
-      const logEntry: UsageLogEntry = {
-        apiKeyId,
-        modelTag: route.tag,
-        upstreamModel: route.upstream_model,
-        promptTokens: 0,
-        completionTokens: 0,
-        totalTokens: 0,
-        latencyMs,
-        status: 'error',
-      }
-      usageLogger.logUsage(logEntry).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
+      finalizeUsage({
+        keyService, ratesService, usageLogger, webhookService,
+        apiKeyId, userId, estimatedTokens,
+        usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+        route, latencyMs, status: 'error', model: body.model,
+      })
       // Re-throw so the error handler returns the correct status
       throw err
     }
