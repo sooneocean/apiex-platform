@@ -1,0 +1,48 @@
+{
+  "sdd_context": {
+    "version": "3.0.0",
+    "feature": "platform-optimize-w2",
+    "feature_name": "平台優化 Wave 2 — 結構化日誌 + Dockerfile 優化 + 前端獨立載入",
+    "current_stage": "S0",
+    "spec_mode": "quick",
+    "spec_mode_reason": "純重構，無新功能/DB/API，直覺性變更",
+    "work_type": "refactor",
+    "spec_folder": "dev/specs/2026-03-20_6_platform-optimize-w2",
+    "execution_mode": "autopilot",
+    "status": "in_progress",
+    "started_at": "2026-03-20T11:00:00Z",
+    "last_updated": "2026-03-20T11:00:00Z",
+    "last_updated_by": "requirement-analyst",
+    "stages": {
+      "s0": {
+        "status": "completed",
+        "agent": "requirement-analyst",
+        "started_at": "2026-03-20T11:00:00Z",
+        "completed_at": "2026-03-20T11:02:00Z",
+        "output": {
+          "work_type": "refactor",
+          "requirement": "結構化日誌取代 console.*、Dockerfile 強化、Portal Dashboard 獨立載入狀態",
+          "goal": "提升運維可觀測性、部署安全性、前端使用體驗",
+          "success_criteria": [
+            "SC-1: api-server 所有 console.* 替換為結構化 logger",
+            "SC-2: Dockerfile 含 HEALTHCHECK + USER node + 快取層優化",
+            "SC-3: Portal Dashboard 各卡片獨立載入狀態",
+            "SC-4: 全部現有測試通過",
+            "SC-5: pnpm build 零錯誤",
+            "SC-6: docker build 成功"
+          ],
+          "scope_in": [
+            "新增 packages/api-server/src/lib/logger.ts",
+            "替換 api-server 全部 console.* 呼叫",
+            "優化 Dockerfile",
+            "重構 portal/dashboard/page.tsx 載入狀態"
+          ],
+          "scope_out": [
+            "Wave 3 項目（type-safe、測試覆蓋率、API 版本控制）",
+            "前端其他頁面的載入狀態改善"
+          ]
+        }
+      }
+    }
+  }
+}

@@ -3,6 +3,7 @@ import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentation
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
 import { Resource } from '@opentelemetry/resources'
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions'
+import { log } from './logger.js'
 
 let sdk: NodeSDK | null = null
 
@@ -10,7 +11,7 @@ export function initTelemetry(): void {
   const otlpEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT
 
   if (!otlpEndpoint) {
-    console.log('[Telemetry] OTEL_EXPORTER_OTLP_ENDPOINT not set, telemetry disabled')
+    log.telemetry.info('OTEL_EXPORTER_OTLP_ENDPOINT not set, telemetry disabled')
     return
   }
 
@@ -34,13 +35,13 @@ export function initTelemetry(): void {
     })
 
     sdk.start()
-    console.log(`[Telemetry] OpenTelemetry initialized, exporting to ${otlpEndpoint}`)
+    log.telemetry.info('OpenTelemetry initialized', { endpoint: otlpEndpoint })
 
     // Graceful shutdown
     process.on('SIGTERM', () => {
-      sdk?.shutdown().catch(console.error)
+      sdk?.shutdown().catch((err) => log.telemetry.error('shutdown failed', { err }))
     })
   } catch (err) {
-    console.warn('[Telemetry] Failed to initialize OpenTelemetry:', err)
+    log.telemetry.warn('Failed to initialize OpenTelemetry', { err })
   }
 }

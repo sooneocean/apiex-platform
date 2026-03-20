@@ -16,6 +16,7 @@ import { adminRoutes } from './routes/admin.js'
 import { topupRoutes, topupWebhookRoute } from './routes/topup.js'
 import { analyticsRoutes } from './routes/analytics.js'
 import { webhookRoutes } from './routes/webhooks.js'
+import { log } from './lib/logger.js'
 
 export function createApp() {
   const app = new Hono()
@@ -92,7 +93,7 @@ export function createApp() {
     if (err instanceof ApiError) {
       return err.toResponse()
     }
-    console.error('Unhandled error:', err)
+    log.server.error('unhandled error', { err })
     return Errors.internalError()
   })
 
@@ -108,6 +109,6 @@ if (process.env.NODE_ENV !== 'test') {
     fetch: app.fetch,
     port,
   }, (info) => {
-    console.log(`Apiex API Server listening on http://localhost:${info.port}`)
+    log.server.info('server started', { port: info.port })
   })
 }

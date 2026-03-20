@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '../lib/supabase.js'
+import { log } from '../lib/logger.js'
 
 export interface UsageLogEntry {
   apiKeyId: string
@@ -33,7 +34,7 @@ export class UsageLogger {
         .select()
         .single()
     } catch (err) {
-      console.error('UsageLogger: failed to write usage log', err)
+      log.usage.error('failed to write usage log', { err })
     }
   }
 }

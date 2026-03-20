@@ -1,6 +1,7 @@
 import { createHmac } from 'crypto'
 import { lookup } from 'dns/promises'
 import { supabaseAdmin } from '../lib/supabase.js'
+import { log } from '../lib/logger.js'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -312,7 +313,7 @@ export class WebhookService {
       .insert({ event_type: eventType, key_id: keyId, user_id: userId })
 
     if (error) {
-      console.error('[WebhookService] Failed to record notification_logs:', error)
+      log.webhook.error('failed to record notification_logs', { err: error })
     }
   }
 

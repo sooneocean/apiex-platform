@@ -126,18 +126,15 @@ export default function PortalDashboardPage() {
   const latency = latencyQuery.data ?? null
   const billing = billingQuery.data ?? null
 
-  const loading = timeseriesQuery.isLoading || breakdownQuery.isLoading || latencyQuery.isLoading || billingQuery.isLoading
   const isFetching = timeseriesQuery.isFetching || breakdownQuery.isFetching || latencyQuery.isFetching || billingQuery.isFetching
-  const error = timeseriesQuery.error || breakdownQuery.error || latencyQuery.error || billingQuery.error
-  const errorMessage = error instanceof Error ? error.message : error ? '資料載入失敗' : null
+  const anyLoading = timeseriesQuery.isLoading || breakdownQuery.isLoading || latencyQuery.isLoading || billingQuery.isLoading
 
   const isEmpty =
-    !loading &&
-    !error &&
+    !anyLoading &&
+    !timeseriesQuery.error &&
+    !breakdownQuery.error &&
     timeseries?.series.length === 0 &&
     breakdown?.breakdown.length === 0
-
-  const hasData = timeseries && breakdown && latency && billing
 
   const totalRequests = timeseries?.totals.total_requests ?? 0
   const totalTokens = timeseries?.totals.total_tokens ?? 0
@@ -168,14 +165,14 @@ export default function PortalDashboardPage() {
           <PeriodSelector
             value={period}
             onChange={(p) => setPeriod(p)}
-            disabled={loading}
+            disabled={anyLoading}
           />
           {!keysQuery.isLoading && keys.length > 0 && (
             <KeySelector
               keys={keys}
               value={selectedKeyId}
               onSelect={(id) => setSelectedKeyId(id)}
-              disabled={loading}
+              disabled={anyLoading}
             />
           )}
           <button
@@ -185,7 +182,7 @@ export default function PortalDashboardPage() {
               latencyQuery.refetch()
               billingQuery.refetch()
             }}
-            disabled={loading}
+            disabled={anyLoading}
             className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-40"
           >
             <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
@@ -193,11 +190,11 @@ export default function PortalDashboardPage() {
         </div>
       </div>
 
-      {errorMessage && <ErrorBanner message={errorMessage} />}
-
       {/* Stats Cards */}
-      {loading ? (
+      {timeseriesQuery.isLoading || billingQuery.isLoading ? (
         <LoadingSkeleton variant="cards" />
+      ) : timeseriesQuery.error || billingQuery.error ? (
+        <ErrorBanner message={timeseriesQuery.error?.message || billingQuery.error?.message || '資料載入失敗'} />
       ) : (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <StatsCard
@@ -246,9 +243,11 @@ export default function PortalDashboardPage() {
       )}
 
       {/* Timeseries Chart */}
-      {loading ? (
+      {timeseriesQuery.isLoading ? (
         <LoadingSkeleton variant="chart" />
-      ) : hasData ? (
+      ) : timeseriesQuery.error ? (
+        <ErrorBanner message={timeseriesQuery.error.message} />
+      ) : timeseries ? (
         <SectionCard title="用量趨勢">
           <TimeseriesAreaChart
             data={timeseries.series}
@@ -259,16 +258,21 @@ export default function PortalDashboardPage() {
       ) : null}
 
       {/* Model Breakdown + Latency */}
-      {loading ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {breakdownQuery.isLoading ? (
           <LoadingSkeleton variant="chart" />
-          <LoadingSkeleton variant="chart" />
-        </div>
-      ) : hasData ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        ) : breakdownQuery.error ? (
+          <ErrorBanner message={breakdownQuery.error.message} />
+        ) : breakdown ? (
           <SectionCard title="Model 分布">
             <DonutChart data={breakdown.breakdown} height={220} />
           </SectionCard>
+        ) : null}
+        {latencyQuery.isLoading ? (
+          <LoadingSkeleton variant="chart" />
+        ) : latencyQuery.error ? (
+          <ErrorBanner message={latencyQuery.error.message} />
+        ) : latency ? (
           <SectionCard title="延遲分析">
             <LatencyLineChart
               data={latency.series}
@@ -276,12 +280,14 @@ export default function PortalDashboardPage() {
               height={220}
             />
           </SectionCard>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
 
       {/* Billing */}
-      {loading ? (
+      {billingQuery.isLoading ? (
         <LoadingSkeleton variant="table" />
+      ) : billingQuery.error ? (
+        <ErrorBanner message={billingQuery.error.message} />
       ) : billing ? (
         <SectionCard title="帳單摘要">
           {billing.cost === null ? (

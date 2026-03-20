@@ -3,6 +3,7 @@ import { supabaseAdmin } from '../lib/supabase.js'
 import { Errors } from '../lib/errors.js'
 import { AggregationService } from '../services/AggregationService.js'
 import { RatesService } from '../services/RatesService.js'
+import { log } from '../lib/logger.js'
 import { RouteConfigService } from '../services/RouteConfigService.js'
 import type { Period } from '../services/AggregationService.js'
 import { KeyService } from '../services/KeyService.js'
@@ -38,7 +39,7 @@ export function adminRoutes() {
     })
 
     if (error) {
-      console.error('admin_list_users error:', error)
+      log.admin.error('admin_list_users error:', { err: error })
       return Errors.internalError()
     }
 
@@ -82,7 +83,7 @@ export function adminRoutes() {
       .single()
 
     if (quotaError) {
-      console.error('upsert user_quotas error:', quotaError)
+      log.admin.error('upsert user_quotas error:', { err: quotaError })
       return Errors.internalError()
     }
 
@@ -94,7 +95,7 @@ export function adminRoutes() {
       .eq('status', 'active')
 
     if (keysError) {
-      console.error('update api_keys quota error:', keysError)
+      log.admin.error('update api_keys quota error:', { err: keysError })
     }
 
     return c.json({
@@ -132,7 +133,7 @@ export function adminRoutes() {
       .eq('status', 'active')
 
     if (keysError) {
-      console.error('update api_keys rate_limit_tier error:', keysError)
+      log.admin.error('update api_keys rate_limit_tier error:', { err: keysError })
       return Errors.internalError()
     }
 
@@ -162,7 +163,7 @@ export function adminRoutes() {
       .range((page - 1) * limit, page * limit - 1)
 
     if (error) {
-      console.error('topup-logs query error:', error)
+      log.admin.error('topup-logs query error:', { err: error })
       return Errors.internalError()
     }
 
@@ -214,7 +215,7 @@ export function adminRoutes() {
       .range((page - 1) * limit, page * limit - 1)
 
     if (error) {
-      console.error('usage-logs query error:', error)
+      log.admin.error('usage-logs query error:', { err: error })
       return Errors.internalError()
     }
 
@@ -243,7 +244,7 @@ export function adminRoutes() {
       if (err instanceof Error && err.message.includes('statement_timeout')) {
         return Errors.gatewayTimeout()
       }
-      console.error('admin overview error:', err)
+      log.admin.error('admin overview error:', { err: err })
       return Errors.internalError()
     }
   })
@@ -263,7 +264,7 @@ export function adminRoutes() {
       if (err instanceof Error && err.message.includes('statement_timeout')) {
         return Errors.gatewayTimeout()
       }
-      console.error('admin latency error:', err)
+      log.admin.error('admin latency error:', { err: err })
       return Errors.internalError()
     }
   })
@@ -285,7 +286,7 @@ export function adminRoutes() {
       if (err instanceof Error && err.message.includes('statement_timeout')) {
         return Errors.gatewayTimeout()
       }
-      console.error('admin top-users error:', err)
+      log.admin.error('admin top-users error:', { err: err })
       return Errors.internalError()
     }
   })
@@ -302,7 +303,7 @@ export function adminRoutes() {
       const rates = await ratesSvc.listRates()
       return c.json({ data: rates })
     } catch (err) {
-      console.error('admin rates list error:', err)
+      log.admin.error('admin rates list error:', { err: err })
       return Errors.internalError()
     }
   })
@@ -337,7 +338,7 @@ export function adminRoutes() {
       })
       return c.json({ data: rate }, 201)
     } catch (err) {
-      console.error('admin create rate error:', err)
+      log.admin.error('admin create rate error:', { err: err })
       return Errors.internalError()
     }
   })
@@ -371,7 +372,7 @@ export function adminRoutes() {
       if (err instanceof Error && err.message === 'not_found') {
         return Errors.notFound()
       }
-      console.error('admin update rate error:', err)
+      log.admin.error('admin update rate error:', { err: err })
       return Errors.internalError()
     }
   })
@@ -388,7 +389,7 @@ export function adminRoutes() {
       const models = await routeConfigSvc.listAll()
       return c.json({ data: models })
     } catch (err) {
-      console.error('admin models list error:', err)
+      log.admin.error('admin models list error:', { err: err })
       return Errors.internalError()
     }
   })
@@ -440,7 +441,7 @@ export function adminRoutes() {
           { status: 409, headers: { 'Content-Type': 'application/json' } }
         )
       }
-      console.error('admin create model error:', err)
+      log.admin.error('admin create model error:', { err: err })
       return Errors.internalError()
     }
   })
@@ -510,7 +511,7 @@ export function adminRoutes() {
           { status: 409, headers: { 'Content-Type': 'application/json' } }
         )
       }
-      console.error('admin update model error:', err)
+      log.admin.error('admin update model error:', { err: err })
       return Errors.internalError()
     }
   })
@@ -528,7 +529,7 @@ export function adminRoutes() {
       const routes = await routeConfigSvc.listAll()
       return c.json({ data: routes })
     } catch (err) {
-      console.error('admin routes list error:', err)
+      log.admin.error('admin routes list error:', { err: err })
       return Errors.internalError()
     }
   })
@@ -580,7 +581,7 @@ export function adminRoutes() {
           { status: 409, headers: { 'Content-Type': 'application/json' } }
         )
       }
-      console.error('admin create route error:', err)
+      log.admin.error('admin create route error:', { err: err })
       return Errors.internalError()
     }
   })
@@ -648,7 +649,7 @@ export function adminRoutes() {
           { status: 409, headers: { 'Content-Type': 'application/json' } }
         )
       }
-      console.error('admin update route error:', err)
+      log.admin.error('admin update route error:', { err: err })
       return Errors.internalError()
     }
   })
@@ -697,7 +698,7 @@ export function adminRoutes() {
       if (err instanceof Error && err.message === 'not_found') {
         return Errors.notFound()
       }
-      console.error('admin toggle route error:', err)
+      log.admin.error('admin toggle route error:', { err: err })
       return Errors.internalError()
     }
   })
@@ -769,7 +770,7 @@ export function adminRoutes() {
       .eq('id', keyId)
 
     if (error) {
-      console.error('admin set spend-limit error:', error)
+      log.admin.error('admin set spend-limit error:', { err: error })
       return Errors.internalError()
     }
 
@@ -802,7 +803,7 @@ export function adminRoutes() {
     try {
       await keyService.resetSpend(keyId)
     } catch (err) {
-      console.error('admin reset-spend error:', err)
+      log.admin.error('admin reset-spend error:', { err: err })
       return Errors.internalError()
     }
 
@@ -834,7 +835,7 @@ export function adminRoutes() {
       .range((page - 1) * limit, page * limit - 1)
 
     if (error) {
-      console.error('admin webhooks list error:', error)
+      log.admin.error('admin webhooks list error:', { err: error })
       return Errors.internalError()
     }
 
@@ -858,7 +859,7 @@ export function adminRoutes() {
       .order('created_at', { ascending: true })
 
     if (error) {
-      console.error('list tiers error:', error)
+      log.admin.error('list tiers error:', { err: error })
       return Errors.internalError()
     }
     return c.json({ data: data ?? [] })
@@ -893,7 +894,7 @@ export function adminRoutes() {
           409
         )
       }
-      console.error('create tier error:', error)
+      log.admin.error('create tier error:', { err: error })
       return Errors.internalError()
     }
 
@@ -932,7 +933,7 @@ export function adminRoutes() {
       if (error.code === 'PGRST116') {
         return Errors.notFound()
       }
-      console.error('update tier error:', error)
+      log.admin.error('update tier error:', { err: error })
       return Errors.internalError()
     }
 
@@ -968,7 +969,7 @@ export function adminRoutes() {
       .eq('status', 'active')
 
     if (countError) {
-      console.error('check tier usage error:', countError)
+      log.admin.error('check tier usage error:', { err: countError })
       return Errors.internalError()
     }
 
@@ -991,7 +992,7 @@ export function adminRoutes() {
       .eq('tier', tier)
 
     if (deleteError) {
-      console.error('delete tier error:', deleteError)
+      log.admin.error('delete tier error:', { err: deleteError })
       return Errors.internalError()
     }
 
@@ -1012,7 +1013,7 @@ export function adminRoutes() {
 
     const { data, error } = await query
     if (error) {
-      console.error('list overrides error:', error)
+      log.admin.error('list overrides error:', { err: error })
       return Errors.internalError()
     }
     return c.json({ data: data ?? [] })
@@ -1067,7 +1068,7 @@ export function adminRoutes() {
           409
         )
       }
-      console.error('create override error:', error)
+      log.admin.error('create override error:', { err: error })
       return Errors.internalError()
     }
 
@@ -1106,7 +1107,7 @@ export function adminRoutes() {
       if (error.code === 'PGRST116') {
         return Errors.notFound()
       }
-      console.error('update override error:', error)
+      log.admin.error('update override error:', { err: error })
       return Errors.internalError()
     }
 
@@ -1140,7 +1141,7 @@ export function adminRoutes() {
       .eq('id', id)
 
     if (deleteError) {
-      console.error('delete override error:', deleteError)
+      log.admin.error('delete override error:', { err: deleteError })
       return Errors.internalError()
     }
 

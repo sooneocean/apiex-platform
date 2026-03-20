@@ -1,5 +1,6 @@
 import { Redis } from '@upstash/redis'
 import { supabaseAdmin } from './supabase.js'
+import { log } from './logger.js'
 
 interface TimestampedCount {
   timestamp: number
@@ -213,7 +214,7 @@ export class RateLimiter {
     try {
       counts = await this.backend.getCounts(counterKey)
     } catch (err) {
-      console.warn('[RateLimiter] Backend error in getCounts, degrading to memory for this call:', err)
+      log.rateLimiter.warn('Backend error in getCounts, degrading to memory for this call:', { err: err })
       const memBackend = new MemoryCounterBackend()
       counts = await memBackend.getCounts(counterKey)
     }
@@ -245,7 +246,7 @@ export class RateLimiter {
     try {
       await this.backend.recordRequest(counterKey, estimatedTokens)
     } catch (err) {
-      console.warn('[RateLimiter] Backend error in recordRequest, skipping record:', err)
+      log.rateLimiter.warn('Backend error in recordRequest, skipping record:', { err: err })
     }
 
     // Store counterKey so record() can use the same key
@@ -267,7 +268,7 @@ export class RateLimiter {
     const lookupKey = model ? `${keyId}:${model}` : keyId
     const counterKey = this.lastCounterKey.get(lookupKey) ?? lookupKey
     this.backend.correctTokens(counterKey, 0, actualTokens).catch(err => {
-      console.warn('[RateLimiter] Backend error in correctTokens:', err)
+      log.rateLimiter.warn('Backend error in correctTokens:', { err: err })
     })
   }
 
@@ -305,13 +306,13 @@ export function createRateLimiter(): RateLimiter {
         url: process.env.UPSTASH_REDIS_REST_URL,
         token: process.env.UPSTASH_REDIS_REST_TOKEN,
       })
-      console.log('[RateLimiter] Using Redis backend (Upstash)')
+      log.rateLimiter.info('Using Redis backend (Upstash)')
       return new RateLimiter(new RedisCounterBackend(redis))
     } catch (err) {
-      console.warn('[RateLimiter] Failed to initialize Redis, falling back to memory:', err)
+      log.rateLimiter.warn('Failed to initialize Redis, falling back to memory:', { err: err })
     }
   }
-  console.log('[RateLimiter] Using memory backend')
+  log.rateLimiter.info('Using memory backend')
   return new RateLimiter(new MemoryCounterBackend())
 }
 

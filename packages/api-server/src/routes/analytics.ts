@@ -3,6 +3,7 @@ import { Errors } from '../lib/errors.js'
 import { AggregationService } from '../services/AggregationService.js'
 import { supabaseAdmin } from '../lib/supabase.js'
 import type { Period } from '../services/AggregationService.js'
+import { log } from '../lib/logger.js'
 
 const VALID_PERIODS: Period[] = ['24h', '7d', '30d']
 
@@ -46,7 +47,7 @@ export function analyticsRoutes() {
       if (err instanceof Error && err.message.includes('statement_timeout')) {
         return Errors.gatewayTimeout()
       }
-      console.error('timeseries error:', err)
+      log.analytics.error('timeseries error', { err: err })
       return Errors.internalError()
     }
   })
@@ -77,7 +78,7 @@ export function analyticsRoutes() {
       if (err instanceof Error && err.message.includes('statement_timeout')) {
         return Errors.gatewayTimeout()
       }
-      console.error('model-breakdown error:', err)
+      log.analytics.error('model-breakdown error', { err: err })
       return Errors.internalError()
     }
   })
@@ -108,7 +109,7 @@ export function analyticsRoutes() {
       if (err instanceof Error && err.message.includes('statement_timeout')) {
         return Errors.gatewayTimeout()
       }
-      console.error('latency error:', err)
+      log.analytics.error('latency error', { err: err })
       return Errors.internalError()
     }
   })
@@ -130,7 +131,7 @@ export function analyticsRoutes() {
       if (err instanceof Error && err.message.includes('statement_timeout')) {
         return Errors.gatewayTimeout()
       }
-      console.error('billing error:', err)
+      log.analytics.error('billing error', { err: err })
       return Errors.internalError()
     }
   })

@@ -290,8 +290,7 @@ describe('Fallback 降級 — T6', () => {
     expect(result).toBeDefined()
     expect(result.allowed).toBeDefined()
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('[RateLimiter]'),
-      expect.anything(),
+      expect.stringContaining('"ctx":"rate-limiter"'),
     )
 
     warnSpy.mockRestore()

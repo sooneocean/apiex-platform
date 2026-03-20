@@ -10,6 +10,7 @@ import { InsufficientQuotaError, Errors } from '../lib/errors.js'
 import type { OpenAIRequest } from '../adapters/types.js'
 import { supabaseAdmin } from '../lib/supabase.js'
 import { rateLimiter } from '../lib/RateLimiter.js'
+import { log } from '../lib/logger.js'
 
 const tracer = trace.getTracer('api-server', '0.1.0')
 
@@ -41,7 +42,7 @@ async function finalizeUsage(opts: {
   const { apiKeyId, userId, estimatedTokens, usage, route, latencyMs, status, model } = opts
 
   // Settle quota
-  keyService.settleQuota(apiKeyId, estimatedTokens, usage.total_tokens).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
+  keyService.settleQuota(apiKeyId, estimatedTokens, usage.total_tokens).catch((err) => log.proxy.error('fire-and-forget failed', { err }))
 
   // Rate limiter
   rateLimiter.record(apiKeyId, usage.total_tokens, model)
@@ -56,7 +57,7 @@ async function finalizeUsage(opts: {
     totalTokens: usage.total_tokens,
     latencyMs,
     status,
-  }).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
+  }).catch((err) => log.proxy.error('fire-and-forget failed', { err }))
 
   // Record spend + notify (only on success with actual tokens)
   if (status === 'success' && usage.total_tokens > 0) {
@@ -68,14 +69,14 @@ async function finalizeUsage(opts: {
           (usage.completion_tokens / 1000) * rate.output_rate_per_1k * 100
         )
         await keyService.recordSpend(apiKeyId, costCents)
-        webhookService.checkAndNotifySpend(userId, apiKeyId).catch((err) => console.error('[proxy] webhook notification failed:', err))
+        webhookService.checkAndNotifySpend(userId, apiKeyId).catch((err) => log.proxy.error('webhook notification failed', { err }))
       }
     } catch (err) {
-      console.error('[proxy] fire-and-forget failed:', err)
+      log.proxy.error('fire-and-forget failed', { err })
     }
 
     // Quota notification
-    webhookService.checkAndNotifyQuota(userId, apiKeyId).catch((err) => console.error('[proxy] webhook notification failed:', err))
+    webhookService.checkAndNotifyQuota(userId, apiKeyId).catch((err) => log.proxy.error('webhook notification failed', { err }))
   }
 }
 
@@ -124,7 +125,7 @@ export function proxyRoutes() {
     const withinLimit = await keyService.checkSpendLimit(apiKeyId)
     if (!withinLimit) {
       // Refund the reserved quota before rejecting
-      keyService.settleQuota(apiKeyId, estimatedTokens, 0).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
+      keyService.settleQuota(apiKeyId, estimatedTokens, 0).catch((err) => log.proxy.error('fire-and-forget failed', { err }))
       return Errors.spendLimitExceeded()
     }
 
@@ -134,7 +135,7 @@ export function proxyRoutes() {
       route = await routerService.resolveRoute(body.model)
     } catch {
       // Route not configured — refund reserved quota and return 503
-      keyService.settleQuota(apiKeyId, estimatedTokens, 0).catch((err) => console.error('[proxy] fire-and-forget failed:', err))
+      keyService.settleQuota(apiKeyId, estimatedTokens, 0).catch((err) => log.proxy.error('fire-and-forget failed', { err }))
       return Errors.routeNotConfigured()
     }
 
@@ -189,7 +190,7 @@ export function proxyRoutes() {
             await stream.write(value)
           }
         } catch (err) {
-          console.error('Stream error:', err)
+          log.proxy.error('stream error', { err })
         } finally {
           // Stream complete — settle quota and log usage
           const latencyMs = Date.now() - startTime
