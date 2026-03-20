@@ -34,8 +34,15 @@ export function createApp() {
     })
   )
 
+  // API version header
+  const API_VERSION = '2026-03-21'
+  app.use('*', async (c, next) => {
+    await next()
+    c.header('X-API-Version', API_VERSION)
+  })
+
   // Health check
-  app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }))
+  app.get('/health', (c) => c.json({ status: 'ok', version: API_VERSION, timestamp: new Date().toISOString() }))
 
   // Proxy routes (API Key auth)
   const v1 = new Hono()

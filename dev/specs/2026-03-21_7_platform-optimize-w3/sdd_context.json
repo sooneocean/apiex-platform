@@ -1,0 +1,37 @@
+{
+  "sdd_context": {
+    "version": "3.0.0",
+    "feature": "platform-optimize-w3",
+    "feature_name": "平台優化 Wave 3 — type-safe + 測試覆蓋率 + API 版本控制",
+    "current_stage": "S0",
+    "spec_mode": "quick",
+    "spec_mode_reason": "純後端重構+測試補齊，無新 DB/前端",
+    "work_type": "refactor",
+    "spec_folder": "dev/specs/2026-03-21_7_platform-optimize-w3",
+    "execution_mode": "autopilot",
+    "status": "in_progress",
+    "started_at": "2026-03-21T10:00:00Z",
+    "last_updated": "2026-03-21T10:00:00Z",
+    "last_updated_by": "requirement-analyst",
+    "stages": {
+      "s0": {
+        "status": "completed",
+        "agent": "requirement-analyst",
+        "started_at": "2026-03-21T10:00:00Z",
+        "completed_at": "2026-03-21T10:02:00Z",
+        "output": {
+          "work_type": "refactor",
+          "requirement": "消除 any 型別、補齊測試覆蓋率、加入 API 版本 header",
+          "goal": "提升長期程式碼品質和 API 穩定性",
+          "success_criteria": [
+            "SC-1: any 使用減少 50%+",
+            "SC-2: 測試檔案數增加 6+",
+            "SC-3: API 回應含 X-API-Version header",
+            "SC-4: 全部測試通過",
+            "SC-5: pnpm build 零錯誤"
+          ]
+        }
+      }
+    }
+  }
+}

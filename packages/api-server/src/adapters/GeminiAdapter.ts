@@ -1,5 +1,22 @@
 import type { ProviderAdapter, OpenAIRequest, OpenAIResponse, StreamChunkResult } from './types.js'
 
+/** Raw Gemini response shape (OpenAI-compat endpoint) */
+interface GeminiRawResponse {
+  id?: string
+  created?: number
+  choices?: Array<{
+    index?: number
+    message?: { role?: string; content?: string }
+    delta?: { role?: string; content?: string }
+    finish_reason?: string | null
+  }>
+  usage?: {
+    prompt_tokens?: number
+    completion_tokens?: number
+    total_tokens?: number
+  }
+}
+
 /**
  * GeminiAdapter — Google Gemini OpenAI 相容層正規化 adapter
  *
@@ -23,37 +40,30 @@ export class GeminiAdapter implements ProviderAdapter {
    * transformResponse: 正規化 Google 回應至標準 OpenAI 格式
    */
   transformResponse(response: unknown, model: string): OpenAIResponse {
-    const res = response as Record<string, unknown>
+    const res = response as GeminiRawResponse
 
-    const rawChoices = (res.choices ?? []) as Array<Record<string, unknown>>
-    const choices = rawChoices.map((choice) => {
-      const rawMessage = (choice.message ?? {}) as Record<string, unknown>
-      const rawFinishReason = (choice.finish_reason as string) ?? 'stop'
+    const choices = (res.choices ?? []).map((choice) => ({
+      index: choice.index ?? 0,
+      message: {
+        role: choice.message?.role ?? 'assistant',
+        content: choice.message?.content ?? '',
+      },
+      finish_reason: this.normalizeFinishReason(choice.finish_reason ?? 'stop'),
+    }))
 
-      return {
-        index: (choice.index as number) ?? 0,
-        message: {
-          role: (rawMessage.role as string) ?? 'assistant',
-          content: (rawMessage.content as string) ?? '',
-        },
-        finish_reason: this.normalizeFinishReason(rawFinishReason),
-      }
-    })
-
-    const rawUsage = res.usage as Record<string, number> | undefined
     const usage = {
-      prompt_tokens: rawUsage?.prompt_tokens ?? 0,
-      completion_tokens: rawUsage?.completion_tokens ?? 0,
-      total_tokens: rawUsage?.total_tokens ?? 0,
+      prompt_tokens: res.usage?.prompt_tokens ?? 0,
+      completion_tokens: res.usage?.completion_tokens ?? 0,
+      total_tokens: res.usage?.total_tokens ?? 0,
     }
 
-    const rawId = (res.id as string) ?? `chatcmpl-${Date.now()}`
+    const rawId = res.id ?? `chatcmpl-${Date.now()}`
     const id = rawId.startsWith('chatcmpl-') ? rawId : `chatcmpl-${rawId}`
 
     return {
       id,
       object: 'chat.completion',
-      created: (res.created as number) ?? Math.floor(Date.now() / 1000),
+      created: res.created ?? Math.floor(Date.now() / 1000),
       model,
       choices,
       usage,
@@ -75,51 +85,44 @@ export class GeminiAdapter implements ProviderAdapter {
       return { chunk: null, done: true }
     }
 
-    let parsed: Record<string, unknown>
+    let parsed: GeminiRawResponse
     if (typeof data === 'string') {
       try {
-        parsed = JSON.parse(data) as Record<string, unknown>
+        parsed = JSON.parse(data) as GeminiRawResponse
       } catch {
         return { chunk: null, done: false }
       }
     } else {
-      parsed = data as Record<string, unknown>
+      parsed = data as GeminiRawResponse
     }
 
-    const rawChoices = (parsed.choices ?? []) as Array<Record<string, unknown>>
-    const choices = rawChoices.map((choice) => {
-      const rawDelta = (choice.delta ?? {}) as Record<string, unknown>
-      const rawFinishReason = choice.finish_reason as string | null
+    const choices = (parsed.choices ?? []).map((choice) => ({
+      index: choice.index ?? 0,
+      delta: {
+        role: choice.delta?.role,
+        content: choice.delta?.content,
+      },
+      finish_reason: choice.finish_reason != null
+        ? this.normalizeFinishReason(choice.finish_reason)
+        : null,
+    }))
 
-      return {
-        index: (choice.index as number) ?? 0,
-        delta: {
-          role: rawDelta.role as string | undefined,
-          content: rawDelta.content as string | undefined,
-        },
-        finish_reason: rawFinishReason !== null && rawFinishReason !== undefined
-          ? this.normalizeFinishReason(rawFinishReason)
-          : null,
-      }
-    })
-
-    const rawUsage = parsed.usage as Record<string, number> | undefined
-    const usage = rawUsage
+    const usage = parsed.usage
       ? {
-          prompt_tokens: rawUsage.prompt_tokens ?? 0,
-          completion_tokens: rawUsage.completion_tokens ?? 0,
-          total_tokens: rawUsage.total_tokens ?? 0,
+          prompt_tokens: parsed.usage.prompt_tokens ?? 0,
+          completion_tokens: parsed.usage.completion_tokens ?? 0,
+          total_tokens: parsed.usage.total_tokens ?? 0,
         }
       : undefined
 
-    const rawId = (parsed.id as string) ?? `chatcmpl-${Date.now()}`
+    const rawId = parsed.id ?? `chatcmpl-${Date.now()}`
     const id = rawId.startsWith('chatcmpl-') ? rawId : `chatcmpl-${rawId}`
 
     return {
       chunk: {
         id,
         object: 'chat.completion.chunk',
-        created: (parsed.created as number) ?? Math.floor(Date.now() / 1000),
+        created: parsed.created ?? Math.floor(Date.now() / 1000),
         model,
         choices,
         usage,
