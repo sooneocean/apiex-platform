@@ -2,6 +2,63 @@
 
 > Self-hosted AI API Gateway with semantic model routing, quota management, and full observability.
 
+## Changelog
+
+### v0.6.0 — Platform Optimization (2026-03-21)
+
+Three-wave quality, performance, and security sweep across the entire codebase.
+
+**Wave 1 — Performance & Security**
+- Database index for `webhook_logs` query performance
+- SSRF protection hardened: complete IPv6 handling (mapped IPv4, ULA, link-local, zone ID)
+- `proxy.ts` post-processing extracted into `finalizeUsage()` — 80 lines of duplication removed
+
+**Wave 2 — Observability & DevOps**
+- Structured JSON logger (`lib/logger.ts`) replaces all 55 `console.*` calls — CloudWatch/Datadog/ELK ready
+- Dockerfile hardened with `HEALTHCHECK` and non-root `USER node`
+- Portal Dashboard: each card/chart section loads independently (no global loading lock)
+
+**Wave 3 — Type Safety & Testing**
+- `GeminiRawResponse` interface eliminates 8 unsafe type casts (-40%)
+- 3 new test suites: logger, apiKeyAuth middleware, API version (+14 tests, 249→263)
+- `X-API-Version` header on all API responses
+
+### v0.5.0 — Dependency Upgrades (2026-03-15)
+
+- **Next.js 15→16**: official codemod migration, removed deprecated `eslint` config
+- **vitest 2→4**: fixed constructor mock patterns (`class {}` syntax) and `mockReturnValueOnce` queue leak
+- **@modelcontextprotocol/sdk 1.12→1.27**
+- **@anthropic-ai/sdk 0.39→0.78** (unused dep — version bump only)
+
+### v0.4.0 — Rust CLI & React Query (2026-03-15)
+
+- **Rust CLI rewrite** (`packages/cli-rs`): 7 commands, 4.2MB binary, 13ms startup, zero runtime deps
+- **TanStack React Query**: replaced `useEffect+useState` data fetching across 4 pages with `staleTime=60s` caching
+- **Dashboard UX polish**: skeleton loading, search debounce, `useMemo`, dynamic chart imports
+
+### v0.3.0 — Webhooks & Observability (2026-03)
+
+- Webhook notification system: 4 event types, HMAC-SHA256 signing, SSRF protection, 1h dedup
+- OpenTelemetry tracing with OTLP export
+- API key expiry support
+
+### v0.2.0 — Monetization & Rate Limiting (2026-03)
+
+- Stripe self-service topup with idempotent webhook processing
+- Per-key spend limits with USD tracking and automatic 402 cutoff
+- Sliding window rate limiting with tier system (free/pro/unlimited)
+- Analytics dashboard: timeseries, latency percentiles, billing breakdown
+
+### v0.1.0 — Initial Release (2026-03)
+
+- OpenAI-compatible proxy with Anthropic + Gemini adapters
+- Semantic model routing (`apex-smart` / `apex-cheap`)
+- Atomic quota management via Supabase RPC
+- Admin + Portal UI (Next.js, Tailwind, i18n)
+- CLI and MCP Server
+
+---
+
 **Drop-in OpenAI replacement** -- change `base_url` and `api_key`, get automatic model routing, per-key spend limits, webhook notifications, and analytics dashboard.
 
 ## Features
@@ -17,7 +74,7 @@
 | **Webhook Notifications** | 4 event types, HMAC-SHA256 signing, SSRF protection, 1h dedup |
 | **Stripe Self-Service Topup** | Checkout session, idempotent webhook, auto quota credit |
 | **Analytics Dashboard** | Timeseries, latency percentiles (p50/p95/p99), top users, billing |
-| **Admin + Portal UI** | Next.js 15 App Router, Tailwind CSS, i18n (zh-TW/en) |
+| **Admin + Portal UI** | Next.js 16 App Router, Tailwind CSS v4, i18n (zh-TW/en) |
 | **CLI** | `apiex login`, `apiex chat`, `apiex keys`, `apiex status` |
 | **MCP Server** | `apiex_chat`, `apiex_models`, `apiex_usage` for AI agents |
 
@@ -26,20 +83,21 @@
 ```
 pnpm monorepo (turbo)
 ├── packages/api-server    # Hono.js backend (Node.js, ESM)
-├── packages/web-admin     # Next.js 15 admin + portal UI
-├── packages/cli           # Commander.js CLI
+├── packages/web-admin     # Next.js 16 admin + portal UI
+├── packages/cli           # TypeScript CLI (Commander.js)
+├── packages/cli-rs        # Rust CLI (standalone binary, 4.2MB, 13ms startup)
 ├── packages/mcp-server    # MCP Server (@modelcontextprotocol/sdk)
 └── supabase/              # Migrations + RPC functions
 ```
 
-**Stack**: TypeScript, Hono, Next.js 15, Supabase (Auth + DB + RLS + RPC), Stripe, Recharts
+**Stack**: TypeScript, Hono, Next.js 16, Supabase (Auth + DB + RLS + RPC), Stripe, Recharts, Rust (CLI)
 
 ## Quick Start
 
 ### Prerequisites
 
-- Node.js 20+
-- pnpm 9+
+- Node.js 22+
+- pnpm 10+
 - Supabase project (free tier works)
 - Anthropic or Google AI API key
 
@@ -47,7 +105,7 @@ pnpm monorepo (turbo)
 
 ```bash
 # Clone
-git clone https://github.com/your-org/apiex-platform.git
+git clone https://github.com/sooneocean/apiex-platform.git
 cd apiex-platform
 
 # Install
